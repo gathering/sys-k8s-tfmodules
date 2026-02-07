@@ -62,9 +62,9 @@ data "talos_client_configuration" "this" {
   nodes                = [for ip in netbox_available_ip_address.this[*].ip_address : trimsuffix(ip, "/64")]
 }
 
-resource "local_file" "talosclientconfig" {
-  count = var.type == "controlplane" ? 1 : 0
+# resource "local_file" "talosclientconfig" {
+#   count = var.type == "controlplane" ? 1 : 0
 
-  content  = data.talos_client_configuration.this.talos_config
-  filename = "${path.root}/talosconfig-${var.cluster_name}"
-}
+#   content  = data.talos_client_configuration.this.talos_config
+#   filename = "${path.root}/talosconfig-${var.cluster_name}"
+# }

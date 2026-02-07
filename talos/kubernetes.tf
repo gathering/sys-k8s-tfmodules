@@ -11,15 +11,15 @@ resource "talos_cluster_kubeconfig" "this" {
   ]
 }
 
-resource "local_file" "kubeconfig" {
-  count = var.type == "controlplane" ? 1 : 0
+# resource "local_file" "kubeconfig" {
+#   count = var.type == "controlplane" ? 1 : 0
 
-  content  = talos_cluster_kubeconfig.this[0].kubeconfig_raw
-  filename = "${path.root}/kubeconfig-${var.cluster_name}"
+#   content  = talos_cluster_kubeconfig.this[0].kubeconfig_raw
+#   filename = "${path.root}/kubeconfig-${var.cluster_name}"
 
-  lifecycle {
-    ignore_changes = [
-      content
-    ]
-  }
-}
+#   lifecycle {
+#     ignore_changes = [
+#       content
+#     ]
+#   }
+# }
