@@ -2,6 +2,7 @@
 data "netbox_vlan_group" "this" {
   name = var.vlan_group
 }
+
 data "netbox_prefix" "this" {
   prefix = var.base_prefix
 }

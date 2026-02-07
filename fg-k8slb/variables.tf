@@ -13,15 +13,17 @@ variable "realservers" {
   type        = list(string)
 }
 
-# Default Variables
 variable "dstintf" {
   description = "Dst interface for policy"
   type        = string
-  default     = "Infra"
 }
 
 variable "srcintf" {
-  description = "Src interface for policy"
-  type        = string
-  default     = "Infra"
+  description = "Src interfaces for policy"
+  type        = list(string)
+}
+
+variable "srcaddr6" {
+  description = "Src addresses for policy. Must exist as a address or group"
+  type        = list(string)
 }

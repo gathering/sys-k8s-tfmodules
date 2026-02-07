@@ -10,31 +10,7 @@ resource "fortios_firewall_policy" "this" {
   nat              = "disable"
 
   dstintf {
-    name = "k8s-infra"
-  }
-
-  srcaddr6 {
-    name = "bastions-v6"
-  }
-
-  srcaddr6 {
-    name = "vlan1700 address"
-  }
-
-  srcaddr6 {
-    name = "vlan1701 address"
-  }
-
-  srcaddr6 {
-    name = "vlan1702 address"
-  }
-
-  srcintf {
-    name = "Infra"
-  }
-
-  srcintf {
-    name = "k8s-infra"
+    name = var.dstintf
   }
 
   dstaddr6 {
@@ -47,6 +23,20 @@ resource "fortios_firewall_policy" "this" {
 
   dstaddr6 {
     name = fortios_firewall_vip6.talosctl_api.name
+  }
+
+  dynamic "srcintf" {
+    for_each = var.srcintf
+    content {
+      name = rule.value
+    }
+  }
+
+  dynamic "srcaddr6" {
+    for_each = var.srcaddr6
+    content {
+      name = rule.value
+    }
   }
 
   service {
