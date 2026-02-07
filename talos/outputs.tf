@@ -1,3 +1,8 @@
+output "name" {
+  description = "Cluster Name"
+  value       = var.cluster_name
+}
+
 output "nodes" {
   description = "List of all nodes"
   value       = [for node in proxmox_virtual_environment_vm.this[*] : { name = node.name, ip = trimsuffix(node.initialization[0].ip_config[0].ipv6[0].address, "/64") }]
@@ -9,13 +14,13 @@ output "nodes_ip" {
 }
 
 output "talosconfig" {
-  description = "Talosctl config"
+  description = "Talosctl config. Output only on type controlplane"
   sensitive   = true
-  value       = data.talos_client_configuration.this.talos_config
+  value       = var.type == "controlplane" ? data.talos_client_configuration.this.talos_config : ""
 }
 
 output "kubeconfig" {
-  description = "Kubeconfig"
+  description = "Kubeconfig. Output only on type controlplane"
   sensitive   = true
-  value       = talos_cluster_kubeconfig.this[0].kubeconfig_raw
+  value       = var.type == "controlplane" ? talos_cluster_kubeconfig.this[0].kubeconfig_raw : ""
 }
