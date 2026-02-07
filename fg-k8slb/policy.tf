@@ -3,7 +3,7 @@ resource "fortios_firewall_policy" "this" {
   inspection_mode  = "flow"
   internet_service = "disable"
   logtraffic       = "all"
-  name             = "${var.name}-in"
+  name             = "${var.name}-api-in"
   schedule         = "always"
   ssl_ssh_profile  = "SSL-Monitor" # Hardcoded
   status           = "enable"
