@@ -28,14 +28,14 @@ resource "fortios_firewall_policy" "this" {
   dynamic "srcintf" {
     for_each = var.srcintf
     content {
-      name = rule.value
+      name = srcintf.value
     }
   }
 
   dynamic "srcaddr6" {
     for_each = var.srcaddr6
     content {
-      name = rule.value
+      name = srcaddr6.value
     }
   }
 
