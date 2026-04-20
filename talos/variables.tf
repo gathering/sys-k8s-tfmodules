@@ -116,7 +116,7 @@ variable "datastore" {
   default     = "ceph1"
 }
 
-variable "vm_brige" {
+variable "vm_bridge" {
   description = "Proxmox Network Bridge"
   type        = string
   default     = "vmbr0"

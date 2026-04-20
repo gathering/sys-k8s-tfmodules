@@ -12,7 +12,7 @@ resource "fortios_firewall_vip6" "k8s_api" {
   }
 
   dynamic "realservers" {
-    for_each = var.realservers
+    for_each = toset(sort(var.realservers))
     content {
       ip   = realservers.value
       port = 6443
@@ -34,7 +34,7 @@ resource "fortios_firewall_vip6" "talos_control_api" {
   }
 
   dynamic "realservers" {
-    for_each = var.realservers
+    for_each = toset(sort(var.realservers))
     content {
       ip   = realservers.value
       port = 50001
@@ -56,7 +56,7 @@ resource "fortios_firewall_vip6" "talosctl_api" {
   }
 
   dynamic "realservers" {
-    for_each = var.realservers
+    for_each = toset(sort(var.realservers))
     content {
       ip   = realservers.value
       port = 50000

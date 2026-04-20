@@ -4,27 +4,27 @@ variable "name" {
 }
 
 variable "srcintf" {
-  description = "Name of policy"
+  description = "Source interface"
   type        = string
 }
 
 variable "srcaddr6" {
-  description = "Name of policy"
+  description = "Source IPv6 addresses"
   type        = list(string)
 }
 
 variable "dstintf" {
-  description = "Name of policy"
+  description = "Destination interface"
   type        = string
 }
 
 variable "dstaddr6" {
-  description = "Name of policy"
+  description = "Destination IPv6 addresses"
   type        = list(string)
 }
 
 variable "services" {
-  description = "Name of policy"
+  description = "Services"
   type        = list(string)
 }
 
