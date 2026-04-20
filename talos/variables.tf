@@ -144,3 +144,9 @@ variable "talos_inline_manifests" {
   #type    = list(object())
   default = []
 }
+
+variable "allow_scheduling_on_control_planes" {
+  description = "Allow scheduling on control planes"
+  type        = bool
+  default     = false
+}

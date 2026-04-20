@@ -22,6 +22,7 @@ locals {
   }
 
   cluster = {
+    allowSchedulingOnControlPlanes = var.allow_scheduling_on_control_planes
     network = {
       cni = {
         name = "none"
