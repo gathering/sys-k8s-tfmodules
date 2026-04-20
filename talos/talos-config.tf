@@ -49,6 +49,14 @@ locals {
         "localhost",
         var.cluster_ip
       ]
+      extraArgs = {
+        oidc-issuer-url      = var.oidc_issuer_url == "" ? null : var.oidc_issuer_url
+        oidc-client-id       = var.oidc_client_id == "" ? null : var.oidc_client_id
+        oidc-username-claim  = var.oidc_username_claim == "" ? null : var.oidc_username_claim
+        oidc-username-prefix = var.oidc_username_prefix == "" ? null : var.oidc_username_prefix
+        oidc-groups-claim    = var.oidc_groups_claim == "" ? null : var.oidc_groups_claim
+        oidc-groups-prefix   = var.oidc_groups_prefix == "" ? null : var.oidc_groups_prefix
+      }
     }
   }
 

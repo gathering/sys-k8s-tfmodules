@@ -150,3 +150,39 @@ variable "allow_scheduling_on_control_planes" {
   type        = bool
   default     = false
 }
+
+variable "oidc_issuer_url" {
+  description = "OIDC Issuer URL"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_client_id" {
+  description = "OIDC Client ID"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_username_claim" {
+  description = "OIDC Username Claim"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_username_prefix" {
+  description = "OIDC Username Prefix"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_groups_claim" {
+  description = "OIDC Groups Claim"
+  type        = string
+  default     = ""
+}
+
+variable "oidc_groups_prefix" {
+  description = "OIDC Groups Prefix"
+  type        = string
+  default     = ""
+}
