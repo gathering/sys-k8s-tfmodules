@@ -1,6 +1,15 @@
 locals {
   cluster_endpoint = "https://[${var.cluster_ip}]:6443"
 
+  cluster_extraArgs_oidc = {
+    oidc-issuer-url      = var.oidc_issuer_url == "" ? null : var.oidc_issuer_url
+    oidc-client-id       = var.oidc_client_id == "" ? null : var.oidc_client_id
+    oidc-username-claim  = var.oidc_username_claim == "" ? null : var.oidc_username_claim
+    oidc-username-prefix = var.oidc_username_prefix == "" ? null : var.oidc_username_prefix
+    oidc-groups-claim    = var.oidc_groups_claim == "" ? null : var.oidc_groups_claim
+    oidc-groups-prefix   = var.oidc_groups_prefix == "" ? null : var.oidc_groups_prefix
+  }
+
   machine = {
     network = {
       nameservers = var.nameservers
@@ -49,15 +58,8 @@ locals {
         "localhost",
         var.cluster_ip
       ]
-      extraArgs = {
-        oidc-issuer-url      = var.oidc_issuer_url == "" ? null : var.oidc_issuer_url
-        oidc-client-id       = var.oidc_client_id == "" ? null : var.oidc_client_id
-        oidc-username-claim  = var.oidc_username_claim == "" ? null : var.oidc_username_claim
-        oidc-username-prefix = var.oidc_username_prefix == "" ? null : var.oidc_username_prefix
-        oidc-groups-claim    = var.oidc_groups_claim == "" ? null : var.oidc_groups_claim
-        oidc-groups-prefix   = var.oidc_groups_prefix == "" ? null : var.oidc_groups_prefix
-      }
     }
+    cluster_extraArgs = var.oidc_issuer_url == "" ? local.cluster_extraArgs_oidc : {}
   }
 
   controlplane_config_patches = [yamlencode(merge({ machine = local.machine, cluster = local.cluster })), yamlencode({ cluster = { inlineManifests = var.talos_inline_manifests } })]

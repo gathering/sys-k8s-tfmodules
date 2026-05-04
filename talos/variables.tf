@@ -166,23 +166,23 @@ variable "oidc_client_id" {
 variable "oidc_username_claim" {
   description = "OIDC Username Claim"
   type        = string
-  default     = ""
+  default     = "preferred_username"
 }
 
 variable "oidc_username_prefix" {
   description = "OIDC Username Prefix"
   type        = string
-  default     = ""
+  default     = "oidc:"
 }
 
 variable "oidc_groups_claim" {
   description = "OIDC Groups Claim"
   type        = string
-  default     = ""
+  default     = "groups"
 }
 
 variable "oidc_groups_prefix" {
   description = "OIDC Groups Prefix"
   type        = string
-  default     = ""
+  default     = "oidc:"
 }
