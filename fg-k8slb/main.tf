@@ -8,12 +8,13 @@ resource "fortios_firewall_vip6" "k8s_api" {
   type        = "server-load-balance"
 
   monitor {
-    name = "tcp-check" # Hardcoded
+    name = var.monitor
   }
 
   dynamic "realservers" {
     for_each = toset(sort(var.realservers))
     content {
+      id   = index(sort(var.realservers), realservers.value) + 1
       ip   = realservers.value
       port = 6443
     }
@@ -30,12 +31,13 @@ resource "fortios_firewall_vip6" "talos_control_api" {
   type        = "server-load-balance"
 
   monitor {
-    name = "tcp-check" # Hardcoded
+    name = var.monitor
   }
 
   dynamic "realservers" {
     for_each = toset(sort(var.realservers))
     content {
+      id   = index(sort(var.realservers), realservers.value) + 1
       ip   = realservers.value
       port = 50001
     }
@@ -52,12 +54,13 @@ resource "fortios_firewall_vip6" "talosctl_api" {
   type        = "server-load-balance"
 
   monitor {
-    name = "tcp-check" # Hardcoded
+    name = var.monitor
   }
 
   dynamic "realservers" {
     for_each = toset(sort(var.realservers))
     content {
+      id   = index(sort(var.realservers), realservers.value) + 1
       ip   = realservers.value
       port = 50000
     }

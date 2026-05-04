@@ -54,6 +54,7 @@ No modules.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_dstintf"></a> [dstintf](#input\_dstintf) | Dst interface for policy | `string` | n/a | yes |
 | <a name="input_extip"></a> [extip](#input\_extip) | External IPv6 address | `string` | n/a | yes |
+| <a name="input_monitor"></a> [monitor](#input\_monitor) | Health monitor name for VIP realservers | `string` | `"tcp-check"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of LoadBalancer | `string` | n/a | yes |
 | <a name="input_realservers"></a> [realservers](#input\_realservers) | List of controlplane nodes (IPv6) | `list(string)` | n/a | yes |
 | <a name="input_srcaddr6"></a> [srcaddr6](#input\_srcaddr6) | Src addresses for policy. Must exist as a address or group | `list(string)` | n/a | yes |

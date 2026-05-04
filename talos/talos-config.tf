@@ -1,7 +1,7 @@
 locals {
   cluster_endpoint = "https://[${var.cluster_ip}]:6443"
 
-  cluster_extraArgs_oidc = {
+  cluster_oidc = {
     oidc-issuer-url      = var.oidc_issuer_url == "" ? null : var.oidc_issuer_url
     oidc-client-id       = var.oidc_client_id == "" ? null : var.oidc_client_id
     oidc-username-claim  = var.oidc_username_claim == "" ? null : var.oidc_username_claim
@@ -10,7 +10,7 @@ locals {
     oidc-groups-prefix   = var.oidc_groups_prefix == "" ? null : var.oidc_groups_prefix
   }
 
-  cluster_extraArgs = merge(var.oidc_issuer_url == "" ? local.cluster_extraArgs_oidc : {}, {})
+  cluster_apiserver_extraArgs = merge(var.oidc_issuer_url == "" ? local.cluster_oidc : {}, {})
 
   machine = {
     network = {
@@ -60,7 +60,7 @@ locals {
         "localhost",
         var.cluster_ip
       ]
-      extraArgs = local.cluster_extraArgs
+      extraArgs = local.cluster_apiserver_extraArgs
     }
   }
 

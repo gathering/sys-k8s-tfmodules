@@ -27,3 +27,9 @@ variable "srcaddr6" {
   description = "Src addresses for policy. Must exist as a address or group"
   type        = list(string)
 }
+
+variable "monitor" {
+  description = "Health monitor name for VIP realservers"
+  type        = string
+  default     = "tcp-check"
+}
