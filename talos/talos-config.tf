@@ -59,7 +59,7 @@ locals {
         var.cluster_ip
       ]
     }
-    cluster_extraArgs = var.oidc_issuer_url == "" ? local.cluster_extraArgs_oidc : {}
+    cluster_extraArgs = var.oidc_issuer_url == "" ? local.cluster_extraArgs_oidc : null
   }
 
   controlplane_config_patches = [yamlencode(merge({ machine = local.machine, cluster = local.cluster })), yamlencode({ cluster = { inlineManifests = var.talos_inline_manifests } })]
