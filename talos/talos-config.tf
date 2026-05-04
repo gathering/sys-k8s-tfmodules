@@ -60,8 +60,8 @@ locals {
         "localhost",
         var.cluster_ip
       ]
+      extraArgs = local.cluster_extraArgs
     }
-    extraArgs = local.cluster_extraArgs
   }
 
   controlplane_config_patches = [yamlencode(merge({ machine = local.machine, cluster = local.cluster })), yamlencode({ cluster = { inlineManifests = var.talos_inline_manifests } })]
