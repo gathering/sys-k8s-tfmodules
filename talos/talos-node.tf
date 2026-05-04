@@ -1,11 +1,12 @@
 data "talos_machine_configuration" "this" {
-  cluster_name     = var.cluster_name
-  machine_type     = var.type
-  cluster_endpoint = local.cluster_endpoint
-  machine_secrets  = var.talos_machine_secrets
-  docs             = false
-  examples         = false
-  talos_version    = var.talos_version
+  cluster_name       = var.cluster_name
+  machine_type       = var.type
+  cluster_endpoint   = local.cluster_endpoint
+  machine_secrets    = var.talos_machine_secrets
+  docs               = false
+  examples           = false
+  talos_version      = var.talos_version
+  kubernetes_version = var.kubernetes_version
 
   config_patches = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
 }

@@ -139,6 +139,11 @@ variable "talos_version" {
   type        = string
 }
 
+variable "kubernetes_version" {
+  description = "Kubernetes Version"
+  type        = string
+}
+
 variable "talos_inline_manifests" {
   description = "Talos Inline Manifests"
   #type    = list(object())
