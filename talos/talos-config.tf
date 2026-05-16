@@ -45,13 +45,14 @@ locals {
       disabled = true
     }
     discovery = {
-      enabled = true
+      enabled = var.discovery_enabled
       registries = {
         kubernetes = {
           disabled = true
         }
         service = {
           disabled = false
+          endpoint = var.discovery_service_endpoint
         }
       }
     }

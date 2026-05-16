@@ -191,3 +191,15 @@ variable "oidc_groups_prefix" {
   type        = string
   default     = "oidc:"
 }
+
+variable "discovery_enabled" {
+  description = "Enable Talos Discovery"
+  type        = bool
+  default     = true
+}
+
+variable "discovery_service_endpoint" {
+  description = "Discovery Service Endpoint"
+  type        = string
+  default     = "discovery.talos.dev"
+}
