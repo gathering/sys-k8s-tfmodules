@@ -201,5 +201,5 @@ variable "discovery_enabled" {
 variable "discovery_service_endpoint" {
   description = "Discovery Service Endpoint"
   type        = string
-  default     = "discovery.talos.dev"
+  default     = "https://discovery.talos.dev:443"
 }

@@ -79,7 +79,7 @@ No modules.
 | <a name="input_datastore"></a> [datastore](#input\_datastore) | Proxmox Datastore | `string` | `"ceph1"` | no |
 | <a name="input_device_networkcard_name"></a> [device\_networkcard\_name](#input\_device\_networkcard\_name) | Netbox nic name | `string` | `"eth0"` | no |
 | <a name="input_discovery_enabled"></a> [discovery\_enabled](#input\_discovery\_enabled) | Enable Talos Discovery | `bool` | `true` | no |
-| <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"discovery.talos.dev"` | no |
+| <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
 | <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS Domain Name | `string` | `"gathering.systems"` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes Version | `string` | n/a | yes |
@@ -113,9 +113,11 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
+| <a name="output_controlplane_config_patches"></a> [controlplane\_config\_patches](#output\_controlplane\_config\_patches) | Controlplane config patches |
 | <a name="output_kubeconfig"></a> [kubeconfig](#output\_kubeconfig) | Kubeconfig. Output only on type controlplane |
 | <a name="output_name"></a> [name](#output\_name) | Cluster Name |
 | <a name="output_nodes"></a> [nodes](#output\_nodes) | List of all nodes |
 | <a name="output_nodes_ip"></a> [nodes\_ip](#output\_nodes\_ip) | List of IPv6 address to all nodes |
 | <a name="output_talosconfig"></a> [talosconfig](#output\_talosconfig) | Talosctl config. Output only on type controlplane |
+| <a name="output_worker_config_patches"></a> [worker\_config\_patches](#output\_worker\_config\_patches) | Worker config patches |
 <!-- END_TF_DOCS -->

@@ -10,7 +10,7 @@ locals {
     oidc-groups-prefix   = var.oidc_groups_prefix == "" ? null : var.oidc_groups_prefix
   }
 
-  cluster_apiserver_extraArgs = merge(var.oidc_issuer_url == "" ? local.cluster_oidc : {}, {})
+  cluster_apiserver_extraArgs = var.oidc_issuer_url == "" ? {} : local.cluster_oidc
 
   machine = {
     network = {

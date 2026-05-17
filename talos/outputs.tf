@@ -24,3 +24,13 @@ output "kubeconfig" {
   sensitive   = true
   value       = var.type == "controlplane" ? talos_cluster_kubeconfig.this[0].kubeconfig_raw : ""
 }
+
+output "controlplane_config_patches" {
+  description = "Controlplane config patches"
+  value       = local.controlplane_config_patches
+}
+
+output "worker_config_patches" {
+  description = "Worker config patches"
+  value       = local.worker_config_patches
+}
