@@ -11,6 +11,25 @@ locals {
   }
 
   cluster_apiserver_extraArgs = var.oidc_issuer_url == "" ? {} : local.cluster_oidc
+  cluster_inlineManifests = [
+    {
+      name     = "oidc-${var.cluster_name}-cluster-admin"
+      contents = <<-EOT
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-${var.cluster_name}-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: oidc:${var.cluster_name}-cluster-admin
+EOT
+    }
+  ]
 
   machine = {
     network = {
@@ -63,6 +82,7 @@ locals {
       ]
       extraArgs = local.cluster_apiserver_extraArgs
     }
+    inlineManifests = local.cluster_inlineManifests
   }
 
   controlplane_config_patches = [yamlencode(merge({ machine = local.machine, cluster = local.cluster })), yamlencode({ cluster = { inlineManifests = var.talos_inline_manifests } })]
