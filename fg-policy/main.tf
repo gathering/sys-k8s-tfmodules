@@ -1,3 +1,8 @@
+locals {
+  nat   = var.nat == true
+  nat64 = var.nat64 == true
+}
+
 resource "fortios_firewall_policy" "this" {
   action           = "accept"
   inspection_mode  = "flow"
@@ -5,26 +10,31 @@ resource "fortios_firewall_policy" "this" {
   logtraffic       = "all"
   name             = var.name
   schedule         = "always"
-  ssl_ssh_profile  = "SSL-Monitor" # Hardcoded
+  ssl_ssh_profile  = var.ssl_ssh_profile
   status           = "enable"
-  comments         = "${var.name} - Created by Terraform Provider for FortiOS"
+  comments         = var.comments == null ? "${var.name} - Created by Terraform Provider for FortiOS" : var.comments == "" ? null : var.comments
 
-  nat64  = var.nat64 ? "enable" : "disable"
-  ippool = var.nat64 ? "enable" : "disable"
+  # Null leaves an argument unset, which is not the same to the provider as "disable"
+  nat    = var.nat == null ? null : local.nat ? "enable" : "disable"
+  nat64  = var.nat64 == null ? null : local.nat64 ? "enable" : "disable"
+  ippool = var.nat64 == null ? null : local.nat64 ? "enable" : "disable"
 
   dynamic "poolname" {
-    for_each = var.nat64 ? ["NAT64-POOL"] : []
+    for_each = local.nat64 ? [var.nat64_pool] : []
     content {
       name = poolname.value
     }
   }
 
-  srcintf {
-    name = var.srcintf
+  dynamic "srcintf" {
+    for_each = var.srcintf
+    content {
+      name = srcintf.value
+    }
   }
 
   dynamic "srcaddr" {
-    for_each = var.nat64 ? ["all"] : []
+    for_each = local.nat64 ? ["all"] : []
     content {
       name = srcaddr.value
     }
@@ -37,12 +47,15 @@ resource "fortios_firewall_policy" "this" {
     }
   }
 
-  dstintf {
-    name = var.dstintf
+  dynamic "dstintf" {
+    for_each = var.dstintf
+    content {
+      name = dstintf.value
+    }
   }
 
   dynamic "dstaddr" {
-    for_each = var.nat64 ? ["all"] : []
+    for_each = local.nat64 ? ["all"] : []
     content {
       name = dstaddr.value
     }

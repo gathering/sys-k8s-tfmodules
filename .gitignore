@@ -35,3 +35,10 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Modules do not commit a dependency lock file; the consumer root module does
+.terraform.lock.hcl
+
+# Cluster credentials written out from module outputs
+kubeconfig*
+talosconfig*
