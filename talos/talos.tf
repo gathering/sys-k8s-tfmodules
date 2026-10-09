@@ -11,20 +11,32 @@ locals {
 
   oidc_enabled = var.oidc != null
 
-  # API server arguments. A claim or prefix set to "" is left out
-  cluster_oidc = {
-    for k, v in local.oidc_enabled ? tomap({
-      oidc-issuer-url      = var.oidc.issuer_url
-      oidc-client-id       = var.oidc.client_id
-      oidc-username-claim  = var.oidc.username_claim
-      oidc-username-prefix = var.oidc.username_prefix
-      oidc-groups-claim    = var.oidc.groups_claim
-      oidc-groups-prefix   = var.oidc.groups_prefix
-    }) : tomap({}) : k => v if v != ""
-  }
+  # OIDC is set up in an AuthenticationConfiguration file and not with the --oidc-*
+  # arguments, which take one audience only. kube-apiserver does not start with both
+  oidc_authentication_config_dir  = "/var/lib/apiserver"
+  oidc_authentication_config_path = "${local.oidc_authentication_config_dir}/authentication.yaml"
+
+  oidc_claim_mappings = local.oidc_enabled ? {
+    username = { claim = var.oidc.username_claim, prefix = var.oidc.username_prefix }
+    groups   = { claim = var.oidc.groups_claim, prefix = var.oidc.groups_prefix }
+  } : {}
+
+  oidc_authentication_config = local.oidc_enabled ? yamlencode({
+    apiVersion = "apiserver.config.k8s.io/v1"
+    kind       = "AuthenticationConfiguration"
+    jwt = [{
+      issuer = {
+        url                 = var.oidc.issuer_url
+        audiences           = distinct(concat([var.oidc.client_id], var.oidc.audiences))
+        audienceMatchPolicy = "MatchAny"
+      }
+      # Without a groups claim the users are in no groups
+      claimMappings = { for k, v in local.oidc_claim_mappings : k => v if v.claim != "" }
+    }]
+  }) : ""
 
   # The group as kube-apiserver sees it: the groups claim value with the groups prefix in front
-  oidc_admin_group = "${lookup(local.cluster_oidc, "oidc-groups-prefix", "")}${var.cluster_name}-cluster-admin"
+  oidc_admin_group = "${local.oidc_enabled ? var.oidc.groups_prefix : ""}${var.cluster_name}-cluster-admin"
 
   # The group is quoted only when YAML needs it. Quoting the default too would change the
   # rendered config and re-apply it on every control plane
@@ -96,14 +108,31 @@ EOT
     proxy = {
       disabled = true
     }
-    apiServer = {
-      certSANs  = local.cert_sans
-      extraArgs = local.cluster_oidc
-    }
+    apiServer = merge({ certSANs = local.cert_sans }, {
+      for k, v in {
+        extraArgs = { authentication-config = local.oidc_authentication_config_path }
+        extraVolumes = [{
+          hostPath  = local.oidc_authentication_config_dir
+          mountPath = local.oidc_authentication_config_dir
+          readonly  = true
+        }]
+      } : k => v if local.oidc_enabled
+    })
     inlineManifests = concat(local.oidc_inline_manifests, var.talos_inline_manifests)
   }
 
-  controlplane_config_patches = [yamlencode({ machine = local.machine, cluster = merge(local.cluster, local.cluster_controlplane) })]
+  # Machine settings only control planes get: the file kube-apiserver reads OIDC from.
+  # kube-apiserver does not run as root, so the file is readable by everyone
+  machine_controlplane = local.oidc_enabled ? {
+    files = [{
+      path        = local.oidc_authentication_config_path
+      op          = "create"
+      permissions = 420 # 0644
+      content     = local.oidc_authentication_config
+    }]
+  } : {}
+
+  controlplane_config_patches = [yamlencode({ machine = merge(local.machine, local.machine_controlplane), cluster = merge(local.cluster, local.cluster_controlplane) })]
   worker_config_patches       = [yamlencode({ machine = local.machine, cluster = local.cluster })]
   config_patches              = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
 }

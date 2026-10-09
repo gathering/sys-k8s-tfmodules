@@ -2,6 +2,24 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.2.0 - 2026-10-10
+
+A plan on a cluster with `oidc` set shows the machine config of every control plane changing: the snippet files are replaced and the config is re-applied. Workers and clusters without `oidc` show no change apart from `extraArgs: {}` leaving the control-plane config.
+
+The new config needs a reboot, because Talos writes the file at boot only:
+
+- On nodes running Talos before 1.14, the default `apply_mode` stages the change. Reboot the control planes one at a time; each moves to the file when it comes back, and uses the `--oidc-*` arguments until then.
+- On nodes running Talos 1.14 or later, set `apply_mode = "staged"` on the control-plane pool for this change, and reboot the control planes one at a time. With the default, the API server argument is applied at once and the file is not there until the reboot: kube-apiserver does not start on any control plane. Read from the Talos source, not tested.
+
+### Added
+
+- `talos`: `oidc.audiences`, more audiences to accept tokens for next to `client_id`.
+
+### Changed
+
+- `talos`: OIDC is set up in an `AuthenticationConfiguration` file, `/var/lib/apiserver/authentication.yaml` on the control planes, instead of with the `--oidc-*` arguments of kube-apiserver. It needs Kubernetes 1.34 or later. Users, groups and the cluster-admin binding are the same as before with the default claims and prefixes.
+- `talos`: `oidc.username_claim` must be set; `""` is rejected. `username_prefix = ""` now means no prefix: the arguments put the issuer URL in front instead. A `username_claim` of `email` no longer requires `email_verified`.
+
 ## v0.1.1 - 2026-10-09
 
 A plan on an existing deployment shows in-place updates only: `dns_name` on every node address and every gateway address, the VM description, and the comments on the FortiGate objects. Where DNS is generated from Netbox, as at The Gathering, the `dns_name` values become DNS records.

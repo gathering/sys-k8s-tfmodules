@@ -116,6 +116,11 @@ run "controlplane_without_oidc" {
   }
 
   assert {
+    condition     = !can(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files) && !can(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraVolumes)
+    error_message = "No authentication configuration file expected with OIDC off."
+  }
+
+  assert {
     condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[*].name == ["extra"]
     error_message = "With OIDC off, control planes must get talos_inline_manifests and no OIDC binding."
   }
@@ -155,6 +160,7 @@ run "null_oidc_attributes_give_the_defaults" {
     oidc = {
       issuer_url      = "https://sso.example.org/realms/test"
       client_id       = "kubernetes"
+      audiences       = null
       username_claim  = null
       username_prefix = null
       groups_claim    = null
@@ -163,15 +169,18 @@ run "null_oidc_attributes_give_the_defaults" {
   }
 
   assert {
-    condition = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs == {
-      oidc-client-id       = "kubernetes"
-      oidc-groups-claim    = "groups"
-      oidc-groups-prefix   = "oidc:"
-      oidc-issuer-url      = "https://sso.example.org/realms/test"
-      oidc-username-claim  = "preferred_username"
-      oidc-username-prefix = "oidc:"
-    }
-    error_message = "A null claim or prefix must give its default, not leave the argument out."
+    condition = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[0].content).jwt == [{
+      issuer = {
+        url                 = "https://sso.example.org/realms/test"
+        audiences           = ["kubernetes"]
+        audienceMatchPolicy = "MatchAny"
+      }
+      claimMappings = {
+        username = { claim = "preferred_username", prefix = "oidc:" }
+        groups   = { claim = "groups", prefix = "oidc:" }
+      }
+    }]
+    error_message = "A null claim, prefix or audiences must give its default."
   }
 }
 
@@ -192,18 +201,43 @@ run "controlplane_with_oidc" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "controlplane"
-    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", username_prefix = "" }
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", audiences = ["dashboard", "kubernetes"], username_prefix = "" }
   }
 
   assert {
-    condition = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs == {
-      oidc-client-id      = "kubernetes"
-      oidc-groups-claim   = "groups"
-      oidc-groups-prefix  = "oidc:"
-      oidc-issuer-url     = "https://sso.example.org/realms/test"
-      oidc-username-claim = "preferred_username"
+    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs == { authentication-config = "/var/lib/apiserver/authentication.yaml" }
+    error_message = "The API server must get the file and no --oidc-* argument: it does not start with both."
+  }
+
+  assert {
+    condition = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraVolumes == [
+      { hostPath = "/var/lib/apiserver", mountPath = "/var/lib/apiserver", readonly = true },
+    ]
+    error_message = "The directory of the file must be mounted in the API server."
+  }
+
+  assert {
+    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[*].path == ["/var/lib/apiserver/authentication.yaml"]
+    error_message = "Control planes must get the authentication configuration as a file."
+  }
+
+  assert {
+    condition = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[0].content) == {
+      apiVersion = "apiserver.config.k8s.io/v1"
+      kind       = "AuthenticationConfiguration"
+      jwt = [{
+        issuer = {
+          url                 = "https://sso.example.org/realms/test"
+          audiences           = ["kubernetes", "dashboard"]
+          audienceMatchPolicy = "MatchAny"
+        }
+        claimMappings = {
+          username = { claim = "preferred_username", prefix = "" }
+          groups   = { claim = "groups", prefix = "oidc:" }
+        }
+      }]
     }
-    error_message = "Unexpected OIDC API server arguments: unset inputs must be left out."
+    error_message = "Unexpected authentication configuration: client_id first, then the other audiences, and the claims as given."
   }
 
   assert {
@@ -220,6 +254,32 @@ run "controlplane_with_oidc" {
   assert {
     condition     = endswith(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[0].contents, "  kind: Group\n  name: oidc:test-cluster-admin\n")
     error_message = "The binding must render the default group unquoted."
+  }
+}
+
+run "oidc_without_groups_claim" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", groups_claim = "" }
+  }
+
+  assert {
+    condition     = keys(yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[0].content).jwt[0].claimMappings) == ["username"]
+    error_message = "Without a groups claim there must be no groups mapping."
   }
 }
 
@@ -339,7 +399,7 @@ run "worker" {
   }
 }
 
-run "oidc_needs_issuer_and_client_id" {
+run "oidc_needs_issuer_client_id_and_username_claim" {
   command = plan
 
   override_resource {
