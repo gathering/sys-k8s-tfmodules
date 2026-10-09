@@ -48,9 +48,14 @@ variable "vdom" {
   nullable    = false
 }
 
+# Nullable on purpose: null leaves the gateway without a DNS name
 variable "domain_name" {
-  description = "DNS domain. The gateway address is named `gw.<name>.<domain_name>` in Netbox"
+  description = "DNS domain. The gateway address is named `gw.<name>.<domain_name>` in Netbox, so `name` must then be usable in a DNS name. Null leaves the gateway address without a DNS name"
   type        = string
   default     = "gathering.systems"
-  nullable    = false
+
+  validation {
+    condition     = var.domain_name == null ? true : can(regex("^[0-9A-Za-z_-]+(\\.[0-9A-Za-z_-]+)*$", var.domain_name))
+    error_message = "domain_name must be a DNS domain: labels of letters, digits, hyphens and underscores, separated by dots. Or null for no DNS name."
+  }
 }

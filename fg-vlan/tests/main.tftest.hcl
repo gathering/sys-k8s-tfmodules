@@ -76,6 +76,57 @@ run "vlan" {
   }
 }
 
+run "domain_name" {
+  command = plan
+
+  variables {
+    domain_name = "example.org"
+  }
+
+  assert {
+    condition     = netbox_ip_address.gw.dns_name == "gw.test.example.org"
+    error_message = "domain_name must be the domain of the gateway's DNS name."
+  }
+}
+
+run "name_must_fit_a_dns_name" {
+  command = plan
+
+  variables {
+    name = "Game Servers"
+  }
+
+  expect_failures = [
+    netbox_ip_address.gw,
+  ]
+}
+
+run "without_a_dns_name" {
+  command = plan
+
+  variables {
+    name        = "Game Servers"
+    domain_name = null
+  }
+
+  assert {
+    condition     = netbox_ip_address.gw.dns_name == null
+    error_message = "A null domain_name must leave the gateway without a DNS name, whatever the VLAN name."
+  }
+}
+
+run "domain_name_is_validated" {
+  command = plan
+
+  variables {
+    domain_name = "not a domain"
+  }
+
+  expect_failures = [
+    var.domain_name,
+  ]
+}
+
 run "null_gives_the_default" {
   command = plan
 

@@ -1,4 +1,6 @@
 locals {
+  gateway_dns_name = var.domain_name == null ? null : "gw.${var.name}.${var.domain_name}"
+
   gateway = "${cidrhost(netbox_available_prefix.this.prefix, 1)}/${netbox_available_prefix.this.prefix_length}"
 }
 
@@ -34,8 +36,17 @@ resource "netbox_available_prefix" "this" {
 resource "netbox_ip_address" "gw" {
   ip_address  = local.gateway
   status      = "reserved"
-  dns_name    = "gw.${var.name}.${var.domain_name}"
+  dns_name    = local.gateway_dns_name
   description = "Reserved for default gateway ${var.name} (VLAN ${netbox_available_vlan.this.vid})"
+
+  # Netbox rejects any other DNS name, on apply. Checked here because a variable validation
+  # cannot refer to a second variable in OpenTofu 1.8
+  lifecycle {
+    precondition {
+      condition     = local.gateway_dns_name == null ? true : can(regex("^[0-9A-Za-z_-]+(\\.[0-9A-Za-z_-]+)*$", local.gateway_dns_name))
+      error_message = "name is part of the gateway's DNS name (gw.<name>.<domain_name>) and may then only contain letters, digits, hyphens, underscores and dots. Set domain_name to null to leave the gateway without a DNS name."
+    }
+  }
 }
 
 ## Create vlan interface on fg

@@ -296,6 +296,11 @@ variable "domain_name" {
   type        = string
   default     = "gathering.systems"
   nullable    = false
+
+  validation {
+    condition     = can(regex("^[0-9A-Za-z_-]+(\\.[0-9A-Za-z_-]+)*$", var.domain_name))
+    error_message = "domain_name must be a DNS domain: labels of letters, digits, hyphens and underscores, separated by dots."
+  }
 }
 
 variable "time_servers" {

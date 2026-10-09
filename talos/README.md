@@ -243,6 +243,7 @@ No modules.
 | <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | Cluster Name |
 | <a name="output_config_patches"></a> [config\_patches](#output\_config\_patches) | Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests |
 | <a name="output_kubeconfig"></a> [kubeconfig](#output\_kubeconfig) | Kubeconfig. Output only on type controlplane |
+| <a name="output_machine_configuration"></a> [machine\_configuration](#output\_machine\_configuration) | Rendered machine config of the pool, as uploaded in the snippet. Holds the cluster secrets |
 | <a name="output_nodes_by_key"></a> [nodes\_by\_key](#output\_nodes\_by\_key) | Nodes as a map from node key to an object with `name` and `ip`. The keys and names are known at plan time |
 | <a name="output_talosconfig"></a> [talosconfig](#output\_talosconfig) | Talosctl config. Output only on type controlplane |
 <!-- END_TF_DOCS -->

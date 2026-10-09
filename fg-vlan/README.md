@@ -1,6 +1,6 @@
 # FortiGate VLANs
 
-Provisions a VLAN end-to-end: allocates the next available VLAN ID from a Netbox VLAN group, allocates an IPv6 prefix from a base prefix, reserves the gateway IP (host 1 of the prefix, e.g. `2001:db8:0:1::1`) in Netbox with the DNS name `gw.<name>.<domain_name>`, creates a VLAN sub-interface on FortiGate, and registers a firewall address object for the prefix.
+Provisions a VLAN end-to-end: allocates the next available VLAN ID from a Netbox VLAN group, allocates an IPv6 prefix from a base prefix, reserves the gateway IP (host 1 of the prefix, e.g. `2001:db8:0:1::1`) in Netbox with the DNS name `gw.<name>.<domain_name>` (set `domain_name = null` for none, which a `name` with spaces or other characters not allowed in a DNS name needs), creates a VLAN sub-interface on FortiGate, and registers a firewall address object for the prefix.
 
 ## Usage
 
@@ -65,7 +65,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain. The gateway address is named `gw.<name>.<domain_name>` in Netbox | `string` | `"gathering.systems"` | no |
+| <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain. The gateway address is named `gw.<name>.<domain_name>` in Netbox, so `name` must then be usable in a DNS name. Null leaves the gateway address without a DNS name | `string` | `"gathering.systems"` | no |
 | <a name="input_interface"></a> [interface](#input\_interface) | Interface on fortigate to add vlan to | `string` | `"fg-bond"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of new vlan. Also used as the FortiGate interface alias, which is limited to 25 characters | `string` | n/a | yes |
 | <a name="input_netbox_base_prefix"></a> [netbox\_base\_prefix](#input\_netbox\_base\_prefix) | Netbox prefix, in CIDR notation, the VLAN prefix is allocated from | `string` | n/a | yes |

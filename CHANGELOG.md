@@ -9,8 +9,10 @@ A plan on an existing deployment shows in-place updates only: `dns_name` on ever
 ### Added
 
 - `talos`: every node address gets a `dns_name` in Netbox, `<node_prefix><key>.<domain_name>`. A plan shows an in-place update of each node address (`dns_name` `""` -> `<node>.<domain>`) and nothing else.
-- `fg-vlan`: the gateway address gets a `dns_name` in Netbox, `gw.<name>.<domain_name>`, with the new input `domain_name` (default `gathering.systems`). A plan shows an in-place update of the gateway address.
+- `fg-vlan`: the gateway address gets a `dns_name` in Netbox, `gw.<name>.<domain_name>`, with the new input `domain_name` (default `gathering.systems`). A plan shows an in-place update of the gateway address. `name` is part of that DNS name: a `name` with spaces or other characters Netbox does not accept in a DNS name is rejected at plan time. Set `domain_name = null` to leave such a VLAN's gateway without a DNS name.
 - `fg-k8slb`: the three VIPs get a comment naming the API and the cluster.
+- `talos`: output `machine_configuration`, the rendered machine config of the pool, sensitive.
+- `talos`, `fg-vlan`: `domain_name` must be a DNS domain.
 
 ### Changed
 
@@ -24,7 +26,7 @@ A plan on an existing deployment shows in-place updates only: `dns_name` on ever
 
 ### Fixed
 
-- `talos`: a change pending on anything the machine config is built from, such as the cluster address or a subnet created in the same configuration, no longer replaces every snippet file and re-applies the config on every node. The precondition that rejects an empty control-plane pool made OpenTofu read the machine configuration during apply; it is now on the `cluster_name` output. An empty control-plane pool still fails at plan time, with the same message.
+- `talos`: a change pending on a resource the machine config is built from, such as an in-place update of the cluster address, no longer replaces every snippet file and re-applies the config on every node, as long as the value the config uses is known at plan time. A value that is only known after apply, such as a prefix allocated in the same run, still does. The precondition that rejects an empty control-plane pool made OpenTofu read the machine configuration during apply; it is now on the `cluster_name` output. An empty control-plane pool still fails at plan time, with the same message.
 
 ## v0.1.0 - 2026-10-09
 

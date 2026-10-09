@@ -31,3 +31,9 @@ output "config_patches" {
   description = "Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests"
   value       = local.config_patches
 }
+
+output "machine_configuration" {
+  description = "Rendered machine config of the pool, as uploaded in the snippet. Holds the cluster secrets"
+  sensitive   = true
+  value       = data.talos_machine_configuration.this.machine_configuration
+}

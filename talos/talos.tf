@@ -109,8 +109,9 @@ EOT
 }
 
 # No preconditions or postconditions here: with one, the data source is read during apply
-# whenever something it references has a change pending. The config is then unknown at plan
-# time, which replaces every snippet file and re-applies the config on every node.
+# whenever something it references has a change pending, even when the value it uses is
+# known. The config is then unknown at plan time, which replaces every snippet file and
+# re-applies the config on every node. tests/pending_change.tftest.hcl checks this.
 data "talos_machine_configuration" "this" {
   cluster_name       = var.cluster_name
   machine_type       = var.type
