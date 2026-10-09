@@ -2,7 +2,7 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
-## Unreleased
+## v0.1.1 - 2026-10-09
 
 A plan on an existing deployment shows in-place updates only: `dns_name` on every node address and every gateway address, the VM description, and the comments on the FortiGate objects. Where DNS is generated from Netbox, as at The Gathering, the `dns_name` values become DNS records.
 

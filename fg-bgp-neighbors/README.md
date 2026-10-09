@@ -8,7 +8,7 @@ The outbound prefix list denies everything on purpose: nothing is advertised to 
 
 ```hcl
 module "bgp_neighbors" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-bgp-neighbors?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-bgp-neighbors?ref=v0.1.1"
 
   cluster_name = "my-cluster"
   neighbors_by_key = {
