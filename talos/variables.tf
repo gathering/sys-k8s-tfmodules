@@ -279,10 +279,9 @@ variable "tags" {
 }
 
 variable "description" {
-  description = "Proxmox VM description"
+  description = "Proxmox VM description. Defaults to a text naming the cluster, the node type and that the VM is managed by OpenTofu"
   type        = string
-  default     = "Managed by Undercloud (Terraform)"
-  nullable    = false
+  default     = null
 }
 
 variable "vm_bridge" {

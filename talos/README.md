@@ -198,7 +198,7 @@ No modules.
 | <a name="input_cores"></a> [cores](#input\_cores) | Number of CPU Cores per node | `number` | `2` | no |
 | <a name="input_cpu_type"></a> [cpu\_type](#input\_cpu\_type) | Proxmox CPU Type | `string` | `"Skylake-Server-noTSX-IBRS"` | no |
 | <a name="input_datastore"></a> [datastore](#input\_datastore) | Proxmox Datastore | `string` | `"ceph1"` | no |
-| <a name="input_description"></a> [description](#input\_description) | Proxmox VM description | `string` | `"Managed by Undercloud (Terraform)"` | no |
+| <a name="input_description"></a> [description](#input\_description) | Proxmox VM description. Defaults to a text naming the cluster, the node type and that the VM is managed by OpenTofu | `string` | `null` | no |
 | <a name="input_device_networkcard_name"></a> [device\_networkcard\_name](#input\_device\_networkcard\_name) | Netbox nic name | `string` | `"eth0"` | no |
 | <a name="input_discovery_enabled"></a> [discovery\_enabled](#input\_discovery\_enabled) | Enable Talos Discovery | `bool` | `true` | no |
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |

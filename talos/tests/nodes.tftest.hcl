@@ -129,7 +129,7 @@ run "defaults" {
       proxmox_virtual_environment_vm.this["a"].on_boot == false,
       proxmox_virtual_environment_vm.this["a"].agent[0].enabled == true,
       proxmox_virtual_environment_vm.this["a"].tags == tolist(["kubernetes", "terraform"]),
-      proxmox_virtual_environment_vm.this["a"].description == "Managed by Undercloud (Terraform)",
+      proxmox_virtual_environment_vm.this["a"].description == "Talos worker node of Kubernetes cluster test. Managed by OpenTofu: changes made here are overwritten.",
       proxmox_virtual_environment_file.this["pve1"].datastore_id == "local",
     ])
     error_message = "A default differs from the value used at The Gathering."
@@ -339,6 +339,7 @@ run "placement_pinned" {
     template_vm_id      = 9000
     template_node_name  = "pve3"
     snippet_datastore   = "snippets"
+    description         = "custom"
   }
 
   assert {
@@ -361,8 +362,9 @@ run "placement_pinned" {
       proxmox_virtual_environment_vm.this["a"].clone[0].vm_id == 9000,
       proxmox_virtual_environment_vm.this["a"].clone[0].node_name == "pve3",
       proxmox_virtual_environment_file.this["pve3"].datastore_id == "snippets",
+      proxmox_virtual_environment_vm.this["a"].description == "custom",
     ])
-    error_message = "Template and snippet datastore inputs must reach the resources."
+    error_message = "Template, snippet datastore and description inputs must reach the resources."
   }
 }
 

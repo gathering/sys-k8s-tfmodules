@@ -2,7 +2,13 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
-## v0.1.0 - unreleased
+## Unreleased
+
+### Changed
+
+- `talos`: the default VM `description` names the cluster and the node type, `Talos <type> node of Kubernetes cluster <cluster_name>. Managed by OpenTofu: changes made here are overwritten.`, instead of `Managed by Undercloud (Terraform)`. A plan shows an in-place update of the description on every VM that uses the default. `description` still overrides it.
+
+## v0.1.0 - 2026-10-09
 
 The first release meant to be pinned. It changes the interface of all five modules compared to `main` before it, which consumers tracked unpinned, and it tracks nodes by key instead of by position. There is no in-place upgrade from the modules before it: clusters are redeployed, see [UPGRADING.md](./UPGRADING.md).
 
