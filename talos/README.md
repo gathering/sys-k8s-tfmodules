@@ -172,9 +172,9 @@ Control planes get one patch: the settings every node uses, the control-plane se
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_netbox"></a> [netbox](#provider\_netbox) | 5.8.0 |
-| <a name="provider_proxmox"></a> [proxmox](#provider\_proxmox) | 0.116.0 |
-| <a name="provider_talos"></a> [talos](#provider\_talos) | 0.12.0 |
+| <a name="provider_netbox"></a> [netbox](#provider\_netbox) | ~> 5.8 |
+| <a name="provider_proxmox"></a> [proxmox](#provider\_proxmox) | ~> 0.116.0 |
+| <a name="provider_talos"></a> [talos](#provider\_talos) | ~> 0.12.0 |
 
 ## Modules
 
