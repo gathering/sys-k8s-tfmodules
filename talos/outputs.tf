@@ -28,7 +28,7 @@ output "kubeconfig" {
 }
 
 output "config_patches" {
-  description = "Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests"
+  description = "Config patches of the pool, one per configuration document. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests"
   value       = local.config_patches
 }
 

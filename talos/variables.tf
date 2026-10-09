@@ -324,7 +324,7 @@ variable "talos_version" {
   nullable    = false
 
   validation {
-    condition     = can(regex("^v?(1\\.(1[4-9]|[2-9][0-9])|[2-9])\\.", var.talos_version))
+    condition     = can(regex("^v?(1\\.(1[4-9]|[2-9][0-9])|[2-9])(\\.|$)", var.talos_version))
     error_message = "talos_version must be v1.14 or later: the config is built from the configuration documents of Talos 1.14."
   }
 }

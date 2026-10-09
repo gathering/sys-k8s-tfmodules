@@ -6,7 +6,7 @@ All notable changes to these modules are listed here. Versions are git tags; pin
 
 `talos`: the machine config is built from the configuration documents of Talos 1.14. Nodes must run Talos 1.14 or later, and `talos_version` must be v1.14 or later: an older value is rejected at plan time. See [UPGRADING.md](./UPGRADING.md) before moving a running cluster.
 
-A plan on an existing cluster shows the machine config of every node changing, workers included: the snippet files are replaced and the config is re-applied. Not applied to a running cluster: rendering is tested, and the result passes `talosctl validate`.
+A plan on an existing cluster shows the machine config of every node changing, workers included: the snippet files are replaced and the config is re-applied. Not applied to a running cluster: rendering is tested, and the result passes `talosctl validate`, which does not look at the content of the OIDC settings. Move a running cluster with `apply_mode = "staged"`.
 
 ### Added
 
@@ -20,7 +20,11 @@ A plan on an existing cluster shows the machine config of every node changing, w
 - `talos`: the module's settings are patched in as one document each instead of one `machine`/`cluster` patch: `ResolverConfig`, `TimeSyncConfig`, `KubeNetworkConfig`, `DiscoveryServiceConfig`, `KubeAPIServerConfig`, `KubeNodeConfig`, `KubeAuthenticationConfig` and `KubeInlineManifestConfig`. kube-proxy and Flannel are left out by removing their documents. The `config_patches` output is a list of those patches.
 - `talos`: with `allow_scheduling_on_control_planes`, a control plane also loses the `node.kubernetes.io/exclude-from-external-load-balancers` label, next to the `NoSchedule` taint. Before, the label stayed.
 - `talos`: the KubePrism port is no longer set by the module. It is the Talos default, 7445, as before.
-- `talos`: everything the module does not set is what Talos generates for the 1.14 contract. Compared to a v1.13 contract that adds secure mount options on EPHEMERAL (`nosuid`, `nodev`), a weekly filesystem trim and workload isolation (`SecurityProfileConfig`).
+- `talos`: everything the module does not set is what Talos generates for the 1.14 contract. Compared to a v1.13 contract:
+  - secure mount options on EPHEMERAL (`nosuid`, `nodev`), a weekly filesystem trim and workload isolation (`SecurityProfileConfig`) are added. The mount options and workload isolation take effect at the next boot.
+  - kube-apiserver accepts anonymous requests on `/livez`, `/readyz` and `/healthz`. Before, it accepted none.
+  - Secrets are read with the secretbox key only. Before, a Secret stored unencrypted was readable too.
+  - `machine.install` becomes an `UnattendedInstallConfig` document, which does nothing on an installed node.
 
 ### Removed
 

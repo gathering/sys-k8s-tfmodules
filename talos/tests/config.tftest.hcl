@@ -132,6 +132,11 @@ run "controlplane_without_oidc" {
   }
 
   assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: ResolverConfig\n")][0].hostDNS == { enabled = true, forwardKubeDNSToHost = true }
+    error_message = "The nameservers must be added to the resolver Talos generates, not replace it."
+  }
+
+  assert {
     condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: DiscoveryServiceConfig\n")][*].endpoint == ["https://discovery.talos.dev:443/"]
     error_message = "The discovery service must be on with the default endpoint."
   }
@@ -528,4 +533,15 @@ run "talos_version_before_1_14_is_rejected" {
   expect_failures = [
     var.talos_version,
   ]
+}
+
+run "talos_version_without_a_patch_version" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    talos_version              = "v1.14"
+  }
 }
