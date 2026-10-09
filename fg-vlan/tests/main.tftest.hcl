@@ -49,6 +49,16 @@ run "vlan" {
   }
 
   assert {
+    condition     = netbox_ip_address.gw.dns_name == "gw.test.gathering.systems"
+    error_message = "The gateway address must get the DNS name gw.<name>.<domain_name>."
+  }
+
+  assert {
+    condition     = fortios_system_interface.this.description == "test (VLAN 123). Managed by OpenTofu" && fortios_firewall_address6.this.comment == "Prefix of test (VLAN 123). Managed by OpenTofu"
+    error_message = "Interface and address must say which VLAN they belong to."
+  }
+
+  assert {
     condition     = fortios_system_interface.this.name == "vlan123" && fortios_system_interface.this.vlanid == 123 && fortios_system_interface.this.alias == "test"
     error_message = "The interface must be named vlan<VLAN ID>, with the VLAN name as alias."
   }

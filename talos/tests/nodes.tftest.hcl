@@ -453,6 +453,6 @@ run "controlplane_pool_needs_a_node" {
   }
 
   expect_failures = [
-    data.talos_machine_configuration.this,
+    output.cluster_name,
   ]
 }

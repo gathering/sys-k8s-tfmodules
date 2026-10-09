@@ -4,9 +4,27 @@ All notable changes to these modules are listed here. Versions are git tags; pin
 
 ## Unreleased
 
+A plan on an existing deployment shows in-place updates only: `dns_name` on every node address and every gateway address, the VM description, and the comments on the FortiGate objects. Where DNS is generated from Netbox, as at The Gathering, the `dns_name` values become DNS records.
+
+### Added
+
+- `talos`: every node address gets a `dns_name` in Netbox, `<node_prefix><key>.<domain_name>`. A plan shows an in-place update of each node address (`dns_name` `""` -> `<node>.<domain>`) and nothing else.
+- `fg-vlan`: the gateway address gets a `dns_name` in Netbox, `gw.<name>.<domain_name>`, with the new input `domain_name` (default `gathering.systems`). A plan shows an in-place update of the gateway address.
+- `fg-k8slb`: the three VIPs get a comment naming the API and the cluster.
+
 ### Changed
 
+- FortiGate comments say what an object is for instead of `<name> - Created by Terraform Provider for FortiOS`. A plan shows an in-place update of each:
+  - `fg-vlan`: interface `<name> (VLAN <vid>). Managed by OpenTofu`, address object `Prefix of <name> (VLAN <vid>). Managed by OpenTofu`.
+  - `fg-bgp-neighbors`: prefix lists `Prefixes accepted from Kubernetes cluster <cluster_name>. Managed by OpenTofu` and `Nothing is advertised to Kubernetes cluster <cluster_name>. Managed by OpenTofu`. The neighbor descriptions are unchanged.
+  - `fg-policy`: the default comment is `Managed by OpenTofu`; set `comments` to say what the policy is for.
+  - `fg-k8slb`: the policy comment is `Kubernetes and Talos API of cluster <cluster_name>. Managed by OpenTofu`.
+
 - `talos`: the default VM `description` names the cluster and the node type, `Talos <type> node of Kubernetes cluster <cluster_name>. Managed by OpenTofu: changes made here are overwritten.`, instead of `Managed by Undercloud (Terraform)`. A plan shows an in-place update of the description on every VM that uses the default. `description` still overrides it.
+
+### Fixed
+
+- `talos`: a change pending on anything the machine config is built from, such as the cluster address or a subnet created in the same configuration, no longer replaces every snippet file and re-applies the config on every node. The precondition that rejects an empty control-plane pool made OpenTofu read the machine configuration during apply; it is now on the `cluster_name` output. An empty control-plane pool still fails at plan time, with the same message.
 
 ## v0.1.0 - 2026-10-09
 

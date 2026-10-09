@@ -108,6 +108,9 @@ EOT
   config_patches              = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
 }
 
+# No preconditions or postconditions here: with one, the data source is read during apply
+# whenever something it references has a change pending. The config is then unknown at plan
+# time, which replaces every snippet file and re-applies the config on every node.
 data "talos_machine_configuration" "this" {
   cluster_name       = var.cluster_name
   machine_type       = var.type
@@ -119,14 +122,6 @@ data "talos_machine_configuration" "this" {
   kubernetes_version = var.kubernetes_version
 
   config_patches = local.config_patches
-
-  lifecycle {
-    # Checked here because bootstrap and kubeconfig have no instance in an empty pool
-    precondition {
-      condition     = var.type != "controlplane" || length(var.node_keys) > 0
-      error_message = "A control-plane pool needs at least one node: give node_keys at least one key."
-    }
-  }
 }
 
 data "talos_client_configuration" "this" {

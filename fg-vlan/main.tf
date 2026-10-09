@@ -34,6 +34,7 @@ resource "netbox_available_prefix" "this" {
 resource "netbox_ip_address" "gw" {
   ip_address  = local.gateway
   status      = "reserved"
+  dns_name    = "gw.${var.name}.${var.domain_name}"
   description = "Reserved for default gateway ${var.name} (VLAN ${netbox_available_vlan.this.vid})"
 }
 
@@ -50,7 +51,7 @@ resource "fortios_system_interface" "this" {
   mode                  = "static"
   role                  = "lan"
   device_identification = "enable"
-  description           = "${var.name} - Created by Terraform Provider for FortiOS"
+  description           = "${var.name} (VLAN ${netbox_available_vlan.this.vid}). Managed by OpenTofu"
   ipv6 {
     ip6_mode        = "static"
     ip6_address     = local.gateway
@@ -62,5 +63,5 @@ resource "fortios_system_interface" "this" {
 resource "fortios_firewall_address6" "this" {
   ip6     = netbox_available_prefix.this.prefix
   name    = "vlan${netbox_available_vlan.this.vid} address"
-  comment = "${var.name} - Created by Terraform Provider for FortiOS"
+  comment = "Prefix of ${var.name} (VLAN ${netbox_available_vlan.this.vid}). Managed by OpenTofu"
 }

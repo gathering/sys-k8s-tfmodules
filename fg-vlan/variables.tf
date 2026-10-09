@@ -47,3 +47,10 @@ variable "vdom" {
   default     = "root"
   nullable    = false
 }
+
+variable "domain_name" {
+  description = "DNS domain. The gateway address is named `gw.<name>.<domain_name>` in Netbox"
+  type        = string
+  default     = "gathering.systems"
+  nullable    = false
+}

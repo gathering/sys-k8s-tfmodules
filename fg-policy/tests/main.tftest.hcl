@@ -24,7 +24,7 @@ run "defaults" {
       fortios_firewall_policy.this.schedule == "always",
       fortios_firewall_policy.this.status == "enable",
       fortios_firewall_policy.this.ssl_ssh_profile == "SSL-Monitor",
-      fortios_firewall_policy.this.comments == "test-egress - Created by Terraform Provider for FortiOS",
+      fortios_firewall_policy.this.comments == "Managed by OpenTofu",
       fortios_firewall_policy.this.nat64 == "disable",
       fortios_firewall_policy.this.ippool == "disable",
     ])
@@ -76,7 +76,13 @@ run "as_called_by_fg_k8slb" {
     dstintf  = ["vlan100"]
     dstaddr6 = ["test-k8s-api", "test-talos-control-api", "test-talosctl-api"]
     services = ["ALL"]
+    comments = "Kubernetes and Talos API of cluster test. Managed by OpenTofu"
     nat      = false
+  }
+
+  assert {
+    condition     = fortios_firewall_policy.this.comments == "Kubernetes and Talos API of cluster test. Managed by OpenTofu"
+    error_message = "A given comment must be used as is."
   }
 
   assert {

@@ -42,7 +42,7 @@ A complete cluster with all five modules is in [`examples/full-cluster`](../exam
 
 ## Node keys
 
-`node_keys` has one key per node. A node is named `<node_prefix><key>`, for example `my-cluster-cp-a`, and every per-node resource is tracked by that key (`...this["a"]`).
+`node_keys` has one key per node. A node is named `<node_prefix><key>`, for example `my-cluster-cp-a`, its address gets the DNS name `<node_prefix><key>.<domain_name>` in Netbox, and every per-node resource is tracked by that key (`...this["a"]`).
 
 - The list must be known at plan time: write the keys out, do not derive them from a resource.
 - A key is part of the hostname and never changes for a node. Adding a key adds a node; removing a key destroys that node's VM, Netbox records and address, and nothing of the other nodes. Reordering the list changes nothing on existing nodes.
@@ -203,7 +203,7 @@ No modules.
 | <a name="input_discovery_enabled"></a> [discovery\_enabled](#input\_discovery\_enabled) | Enable Talos Discovery | `bool` | `true` | no |
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
-| <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS Domain Name | `string` | `"gathering.systems"` | no |
+| <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes Version | `string` | n/a | yes |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |

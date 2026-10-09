@@ -110,6 +110,11 @@ run "plan_new_pool" {
   }
 
   assert {
+    condition     = { for key, ip in netbox_available_ip_address.this : key => ip.dns_name } == { a = "test-cp-a.gathering.systems", b = "test-cp-b.gathering.systems", c = "test-cp-c.gathering.systems" }
+    error_message = "Each node address must get the DNS name <node_prefix><key>.<domain_name>."
+  }
+
+  assert {
     condition     = keys(output.nodes_by_key) == ["a", "b", "c"] && [for node in values(output.nodes_by_key) : node.name] == ["test-cp-a", "test-cp-b", "test-cp-c"]
     error_message = "Keys and names of nodes_by_key must be known before the addresses exist: other modules use them as for_each keys."
   }
@@ -205,7 +210,7 @@ run "empty_controlplane_pool_is_rejected" {
   }
 
   expect_failures = [
-    data.talos_machine_configuration.this,
+    output.cluster_name,
   ]
 }
 

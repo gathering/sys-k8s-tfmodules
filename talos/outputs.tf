@@ -1,6 +1,13 @@
 output "cluster_name" {
   description = "Cluster Name"
   value       = var.cluster_name
+
+  # Checked on an output because bootstrap and kubeconfig have no instance in an empty pool,
+  # and the machine configuration data source must not carry a precondition
+  precondition {
+    condition     = var.type != "controlplane" || length(var.node_keys) > 0
+    error_message = "A control-plane pool needs at least one node: give node_keys at least one key."
+  }
 }
 
 output "nodes_by_key" {

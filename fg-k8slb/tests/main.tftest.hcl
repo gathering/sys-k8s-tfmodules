@@ -38,6 +38,15 @@ run "vips" {
   }
 
   assert {
+    condition = { for k, vip in fortios_firewall_vip6.this : k => vip.comment } == {
+      k8s-api           = "Kubernetes API of cluster test. Managed by OpenTofu"
+      talos-control-api = "Talos trustd of cluster test. Managed by OpenTofu"
+      talosctl-api      = "Talos API (apid) of cluster test. Managed by OpenTofu"
+    }
+    error_message = "Each VIP must say which API of which cluster it is."
+  }
+
+  assert {
     condition     = output.vip_names == { k8s-api = "test-k8s-api", talos-control-api = "test-talos-control-api", talosctl-api = "test-talosctl-api" }
     error_message = "The vip_names output must keep its keys."
   }

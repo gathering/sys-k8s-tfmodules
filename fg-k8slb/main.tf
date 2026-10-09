@@ -6,6 +6,12 @@ locals {
     talosctl-api      = 50000
   }
 
+  vip_comments = {
+    k8s-api           = "Kubernetes API"
+    talos-control-api = "Talos trustd"
+    talosctl-api      = "Talos API (apid)"
+  }
+
   # In id order
   realservers = values({
     for rs in values(var.realservers_by_key) : format("%010d", rs.id) => { id = rs.id, ip = rs.ip }
@@ -16,6 +22,7 @@ resource "fortios_firewall_vip6" "this" {
   for_each = local.vips
 
   name        = "${var.cluster_name}-${each.key}"
+  comment     = "${local.vip_comments[each.key]} of cluster ${var.cluster_name}. Managed by OpenTofu"
   extip       = var.extip
   extport     = tostring(each.value)
   server_type = "tcp"
@@ -48,5 +55,6 @@ module "policy" {
   dstaddr6        = [for vip in fortios_firewall_vip6.this : vip.name]
   services        = ["ALL"]
   ssl_ssh_profile = var.ssl_ssh_profile
+  comments        = "Kubernetes and Talos API of cluster ${var.cluster_name}. Managed by OpenTofu"
   nat             = false
 }

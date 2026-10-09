@@ -58,7 +58,7 @@ variable "nat" {
 }
 
 variable "comments" {
-  description = "Policy comment. Defaults to `<name> - Created by Terraform Provider for FortiOS`"
+  description = "Policy comment: say what the policy is for. Defaults to `Managed by OpenTofu`"
   type        = string
   default     = null
 }

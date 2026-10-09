@@ -292,7 +292,7 @@ variable "vm_bridge" {
 }
 
 variable "domain_name" {
-  description = "DNS Domain Name"
+  description = "DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`)"
   type        = string
   default     = "gathering.systems"
   nullable    = false
