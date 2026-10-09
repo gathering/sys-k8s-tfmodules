@@ -67,8 +67,8 @@ variables {
   type                  = "worker"
   node_keys             = ["a", "b"]
   cluster_ip            = "2001:db8::1"
-  talos_version         = "v1.11.0"
-  kubernetes_version    = "1.34.0"
+  talos_version         = "v1.14.2"
+  kubernetes_version    = "v1.35.5"
   netbox_node_prefix    = "2001:db8:0:1::/64"
   netbox_node_prefix_id = 42
   node_vlan_vid         = 100
@@ -260,7 +260,7 @@ run "null_gives_the_default" {
   }
 
   assert {
-    condition     = yamldecode(output.config_patches[0]).cluster.discovery == { enabled = true, registries = { kubernetes = { disabled = true }, service = { disabled = false, endpoint = "https://discovery.talos.dev:443" } } }
+    condition     = contains(output.config_patches, yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", endpoint = "https://discovery.talos.dev:443" }))
     error_message = "A null discovery input must give the module default in the config patch."
   }
 }

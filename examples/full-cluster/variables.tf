@@ -25,13 +25,13 @@ variable "worker_keys" {
 variable "talos_version" {
   description = "Talos version contract the machine config is generated for"
   type        = string
-  default     = "v1.11.0"
+  default     = "v1.14.2"
 }
 
 variable "kubernetes_version" {
   description = "Kubernetes version"
   type        = string
-  default     = "1.34.0"
+  default     = "v1.35.5"
 }
 
 variable "netbox_vlan_group_name" {

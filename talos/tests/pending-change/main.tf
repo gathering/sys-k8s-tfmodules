@@ -31,8 +31,8 @@ module "pool" {
   type                  = "worker"
   node_keys             = ["a"]
   cluster_ip            = terraform_data.cluster_ip.input
-  talos_version         = "v1.11.0"
-  kubernetes_version    = "1.34.0"
+  talos_version         = "v1.14.2"
+  kubernetes_version    = "v1.35.5"
   netbox_node_prefix    = "2001:db8:0:1::/64"
   netbox_node_prefix_id = 42
   node_vlan_vid         = 100

@@ -55,8 +55,8 @@ variables {
   type                  = "controlplane"
   node_keys             = ["a", "b", "c"]
   cluster_ip            = "2001:db8::1"
-  talos_version         = "v1.11.0"
-  kubernetes_version    = "1.34.0"
+  talos_version         = "v1.14.2"
+  kubernetes_version    = "v1.35.5"
   netbox_node_prefix    = "2001:db8:0:1::/64"
   netbox_node_prefix_id = 42
   node_vlan_vid         = 100

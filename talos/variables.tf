@@ -311,14 +311,21 @@ variable "time_servers" {
 }
 
 variable "talos_version" {
-  description = "Talos version contract the machine config is generated for (e.g. `v1.11.0`). It does not select the installed Talos image; keep the value the cluster was created with instead of bumping it on every upgrade"
+  description = "Talos version contract the machine config is generated for, v1.14 or later. It does not select the installed Talos image. The nodes must run at least this version"
   type        = string
+  default     = "v1.14.2"
   nullable    = false
+
+  validation {
+    condition     = can(regex("^v?(1\\.(1[4-9]|[2-9][0-9])|[2-9])\\.", var.talos_version))
+    error_message = "talos_version must be v1.14 or later: the config is built from the configuration documents of Talos 1.14."
+  }
 }
 
 variable "kubernetes_version" {
-  description = "Kubernetes Version"
+  description = "Kubernetes version"
   type        = string
+  default     = "v1.35.5"
   nullable    = false
 }
 
