@@ -15,7 +15,7 @@ The following objects must already exist on the FortiGate:
 
 ```hcl
 module "k8s_lb" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-k8slb?ref=v0.2.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-k8slb?ref=v0.3.0"
 
   cluster_name = "my-cluster"
   extip        = "2001:db8::1"

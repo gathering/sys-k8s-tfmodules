@@ -6,7 +6,7 @@ Provisions a VLAN end-to-end: allocates the next available VLAN ID from a Netbox
 
 ```hcl
 module "vlan_servers" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-vlan?ref=v0.2.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-vlan?ref=v0.3.0"
 
   name                   = "servers"
   netbox_vlan_group_name = "prod-vlans"

@@ -1,5 +1,6 @@
 # Machine config rendering. The talos provider is real: its data sources render locally
-# from the secrets the setup module generates. Netbox and Proxmox are mocked. The Talos
+# from the secrets the setup module generates. The config is a stream of documents: an
+# assert picks the documents of one kind out of it by how each starts. Netbox and Proxmox are mocked. The Talos
 # resources that talk to a node are overridden in each run, because a file-level override
 # would also have to match the setup module.
 
@@ -62,8 +63,8 @@ variables {
   node_prefix           = "n-"
   node_keys             = ["a"]
   cluster_ip            = "2001:db8::1"
-  talos_version         = "v1.11.0"
-  kubernetes_version    = "1.34.0"
+  talos_version         = "v1.14.2"
+  kubernetes_version    = "v1.35.5"
   netbox_node_prefix    = "2001:db8:0:1::/64"
   netbox_node_prefix_id = 42
   node_vlan_vid         = 100
@@ -101,42 +102,141 @@ run "controlplane_without_oidc" {
   }
 
   assert {
-    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.type == "controlplane"
-    error_message = "Expected a control-plane machine config."
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.type == "controlplane" && yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1"]
+    error_message = "Expected a control-plane machine config with the certificate SANs."
   }
 
   assert {
-    condition     = length(output.config_patches) == 1 && data.talos_machine_configuration.this.config_patches == tolist(local.controlplane_config_patches)
-    error_message = "Control planes must get the single control-plane patch."
+    condition     = output.config_patches == tolist(local.controlplane_config_patches) && data.talos_machine_configuration.this.config_patches == tolist(local.controlplane_config_patches)
+    error_message = "Control planes must get the control-plane patches."
   }
 
   assert {
-    condition     = length(try(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs, {})) == 0
-    error_message = "No API server arguments expected with OIDC off."
+    condition     = [for kind in ["KubeProxyConfig", "KubeFlannelCNIConfig", "KubePrismConfig", "KubeAPIServerConfig", "KubeNodeConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 1, 1, 1]
+    error_message = "No kube-proxy, no Flannel and KubePrism on are part of the design."
   }
 
   assert {
-    condition     = !can(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files) && !can(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraVolumes)
-    error_message = "No authentication configuration file expected with OIDC off."
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAPIServerConfig\n")][0].certExtraSANs == ["localhost", "2001:db8::1"] && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubePrismConfig\n")][0].port == 7445
+    error_message = "The API server certificate must have the cluster address, and KubePrism its port."
   }
 
   assert {
-    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[*].name == ["extra"]
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNetworkConfig\n")][0].podSubnets == ["2001:db8:42::/56"] && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNetworkConfig\n")][0].serviceSubnets == ["2001:db8:42:100::/112"]
+    error_message = "The pod and service subnets must replace the ones Talos generates."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: ResolverConfig\n")][0].nameservers == [{ address = "2606:4700:4700::64" }] && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: TimeSyncConfig\n")][0].ntp.servers == ["time.cloudflare.com"]
+    error_message = "Nameservers and time servers must be set."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: ResolverConfig\n")][0].hostDNS == { enabled = true, forwardKubeDNSToHost = true }
+    error_message = "The nameservers must be added to the resolver Talos generates, not replace it."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: DiscoveryServiceConfig\n")][*].endpoint == ["https://discovery.talos.dev:443/"]
+    error_message = "The discovery service must be on with the default endpoint."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNodeConfig\n")][0].taints == { "node-role.kubernetes.io/control-plane" = "NoSchedule" }
+    error_message = "Control planes must keep the NoSchedule taint unless scheduling on them is allowed."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration.jwt == []
+    error_message = "No OIDC issuer expected with OIDC off."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][*].name == ["extra"]
     error_message = "With OIDC off, control planes must get talos_inline_manifests and no OIDC binding."
-  }
-
-  assert {
-    condition = alltrue([
-      yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.network.cni.name == "none",
-      yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.proxy.disabled,
-      yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.features.kubePrism.enabled,
-    ])
-    error_message = "CNI none, kube-proxy disabled and kubePrism on are part of the design."
   }
 
   assert {
     condition     = output.kubeconfig != "" && output.talosconfig != ""
     error_message = "Control planes must output kubeconfig and talosconfig."
+  }
+}
+
+run "scheduling_on_control_planes" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets              = run.setup.machine_secrets
+    talos_client_configuration         = run.setup.client_configuration
+    type                               = "controlplane"
+    allow_scheduling_on_control_planes = true
+  }
+
+  assert {
+    condition     = [for d in [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNodeConfig\n")] : { labels = d.labels, taints = try(d.taints, {}) }] == [{ labels = { "node-role.kubernetes.io/control-plane" = "" }, taints = {} }]
+    error_message = "With scheduling allowed a control plane must have no taint and must not be kept out of load balancers."
+  }
+}
+
+run "extra_cert_sans" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    extra_cert_sans            = ["api.test.example.org"]
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1", "api.test.example.org"] && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAPIServerConfig\n")][0].certExtraSANs == ["localhost", "2001:db8::1", "api.test.example.org"]
+    error_message = "extra_cert_sans must be in the certificates of the Talos API and the Kubernetes API."
+  }
+}
+
+run "discovery_off" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    discovery_enabled          = false
+  }
+
+  assert {
+    condition     = length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: DiscoveryServiceConfig\n")]) == 0
+    error_message = "With discovery off there must be no discovery service."
   }
 }
 
@@ -169,7 +269,7 @@ run "null_oidc_attributes_give_the_defaults" {
   }
 
   assert {
-    condition = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[0].content).jwt == [{
+    condition = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration.jwt == [{
       issuer = {
         url                 = "https://sso.example.org/realms/test"
         audiences           = ["kubernetes"]
@@ -205,26 +305,11 @@ run "controlplane_with_oidc" {
   }
 
   assert {
-    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs == { authentication-config = "/var/lib/apiserver/authentication.yaml" }
-    error_message = "The API server must get the file and no --oidc-* argument: it does not start with both."
-  }
-
-  assert {
-    condition = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraVolumes == [
-      { hostPath = "/var/lib/apiserver", mountPath = "/var/lib/apiserver", readonly = true },
-    ]
-    error_message = "The directory of the file must be mounted in the API server."
-  }
-
-  assert {
-    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[*].path == ["/var/lib/apiserver/authentication.yaml"]
-    error_message = "Control planes must get the authentication configuration as a file."
-  }
-
-  assert {
-    condition = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[0].content) == {
-      apiVersion = "apiserver.config.k8s.io/v1"
-      kind       = "AuthenticationConfiguration"
+    condition = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration == {
+      anonymous = {
+        enabled    = true
+        conditions = [{ path = "/livez" }, { path = "/readyz" }, { path = "/healthz" }]
+      }
       jwt = [{
         issuer = {
           url                 = "https://sso.example.org/realms/test"
@@ -237,23 +322,22 @@ run "controlplane_with_oidc" {
         }
       }]
     }
-    error_message = "Unexpected authentication configuration: client_id first, then the other audiences, and the claims as given."
+    error_message = "Unexpected authentication configuration: client_id first, then the other audiences, the claims as given, and anonymous requests to the health endpoints only."
   }
 
   assert {
-    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[*].name == ["oidc-test-cluster-admin", "extra"]
+    condition     = !can([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAPIServerConfig\n")][0].extraArgs) && !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.files)
+    error_message = "OIDC must not need API server arguments or files: Talos owns the authentication configuration."
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][*].name == ["oidc-test-cluster-admin", "extra"]
     error_message = "Control planes must get the OIDC binding followed by talos_inline_manifests."
   }
 
   assert {
-    condition     = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[0].contents).subjects[0].name == "oidc:test-cluster-admin"
+    condition     = yamldecode([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][0].manifest).subjects[0].name == "oidc:test-cluster-admin"
     error_message = "The binding must name the group with the default groups prefix."
-  }
-
-  # The default group is rendered unquoted; a change here re-applies the config on every control plane
-  assert {
-    condition     = endswith(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[0].contents, "  kind: Group\n  name: oidc:test-cluster-admin\n")
-    error_message = "The binding must render the default group unquoted."
   }
 }
 
@@ -278,8 +362,34 @@ run "oidc_without_groups_claim" {
   }
 
   assert {
-    condition     = keys(yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.files[0].content).jwt[0].claimMappings) == ["username"]
+    condition     = keys([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration.jwt[0].claimMappings) == ["username"]
     error_message = "Without a groups claim there must be no groups mapping."
+  }
+}
+
+run "oidc_without_cluster_admin_binding" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", cluster_admin_binding = false }
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][*].name == ["extra"] && length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration.jwt) == 1
+    error_message = "With cluster_admin_binding off, OIDC must stay on and only the binding must go."
   }
 }
 
@@ -304,7 +414,7 @@ run "oidc_groups_prefix_names_the_group" {
   }
 
   assert {
-    condition     = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[0].contents).subjects[0].name == "* #test-cluster-admin"
+    condition     = yamldecode([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][0].manifest).subjects[0].name == "* #test-cluster-admin"
     error_message = "The binding must use groups_prefix, also when it needs quoting in YAML."
   }
 }
@@ -330,7 +440,7 @@ run "oidc_without_groups_prefix" {
   }
 
   assert {
-    condition     = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[0].contents).subjects[0].name == "test-cluster-admin"
+    condition     = yamldecode([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][0].manifest).subjects[0].name == "test-cluster-admin"
     error_message = "Without a groups prefix the binding must name the bare group."
   }
 }
@@ -349,53 +459,37 @@ run "worker" {
   }
 
   variables {
-    talos_machine_secrets      = run.setup.machine_secrets
-    talos_client_configuration = run.setup.client_configuration
-    type                       = "worker"
-    node_keys                  = ["a", "b"]
-    pod_subnets                = ["2001:db8:42::/56"]
-    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes" }
+    talos_machine_secrets              = run.setup.machine_secrets
+    talos_client_configuration         = run.setup.client_configuration
+    type                               = "worker"
+    node_keys                          = ["a", "b"]
+    oidc                               = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes" }
+    allow_scheduling_on_control_planes = true
   }
 
   assert {
-    condition     = yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.type == "worker"
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.type == "worker"
     error_message = "Expected a worker machine config."
   }
 
   assert {
-    condition     = length(output.config_patches) == 1 && data.talos_machine_configuration.this.config_patches == tolist(local.worker_config_patches)
-    error_message = "Workers must get the single worker patch."
+    condition     = output.config_patches == tolist(local.worker_config_patches) && data.talos_machine_configuration.this.config_patches == tolist(local.worker_config_patches)
+    error_message = "Workers must get the worker patches."
   }
 
   assert {
-    condition = length(setintersection(keys(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster), [
-      "allowSchedulingOnControlPlanes", "apiServer", "inlineManifests", "proxy",
-    ])) == 0 && !contains(keys(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.network), "cni")
-    error_message = "Workers must not get settings that only control planes act on."
+    condition     = [for kind in ["KubeAPIServerConfig", "KubeAuthenticationConfig", "KubeInlineManifestConfig", "KubeProxyConfig", "KubeFlannelCNIConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 0, 0, 0]
+    error_message = "Workers must not get what only control planes act on."
   }
 
   assert {
-    condition     = !strcontains(output.config_patches[0], "oidc") && !strcontains(output.config_patches[0], "extra")
-    error_message = "OIDC settings and talos_inline_manifests must only reach control planes."
+    condition     = alltrue([for patch in output.config_patches : !strcontains(patch, "oidc") && !strcontains(patch, "extra") && !strcontains(patch, "KubeNodeConfig")])
+    error_message = "OIDC settings, talos_inline_manifests and the scheduling setting must only reach control planes."
   }
 
   assert {
-    condition = alltrue([
-      yamldecode(data.talos_machine_configuration.this.machine_configuration).machine.features.kubePrism.enabled,
-      yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.discovery.registries.kubernetes.disabled,
-      yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.network.podSubnets == ["2001:db8:42::/56"],
-    ])
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNetworkConfig\n")][0].podSubnets == ["2001:db8:42::/56"] && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubePrismConfig\n")][0].port == 7445 && length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: DiscoveryServiceConfig\n")]) == 1
     error_message = "Workers must keep the settings every node uses."
-  }
-
-  assert {
-    condition     = length(talos_machine_bootstrap.this) == 0 && length(talos_cluster_kubeconfig.this) == 0
-    error_message = "Workers must not bootstrap or fetch a kubeconfig."
-  }
-
-  assert {
-    condition     = output.kubeconfig == "" && output.talosconfig == ""
-    error_message = "Workers must not output credentials."
   }
 }
 
@@ -424,4 +518,30 @@ run "oidc_needs_issuer_client_id_and_username_claim" {
   expect_failures = [
     var.oidc,
   ]
+}
+
+run "talos_version_before_1_14_is_rejected" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    talos_version              = "v1.13.2"
+  }
+
+  expect_failures = [
+    var.talos_version,
+  ]
+}
+
+run "talos_version_without_a_patch_version" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    talos_version              = "v1.14"
+  }
 }

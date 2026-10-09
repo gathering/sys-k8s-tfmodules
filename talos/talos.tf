@@ -1,46 +1,23 @@
 locals {
   kube_apiserver_port = 6443
-  kubeprism_port      = 7445
 
   cluster_endpoint = "https://[${var.cluster_ip}]:${local.kube_apiserver_port}"
 
-  cert_sans = [
-    "localhost",
-    var.cluster_ip
-  ]
+  cert_sans = concat(["localhost", var.cluster_ip], var.extra_cert_sans)
 
   oidc_enabled = var.oidc != null
-
-  # OIDC is set up in an AuthenticationConfiguration file and not with the --oidc-*
-  # arguments, which take one audience only. kube-apiserver does not start with both
-  oidc_authentication_config_dir  = "/var/lib/apiserver"
-  oidc_authentication_config_path = "${local.oidc_authentication_config_dir}/authentication.yaml"
 
   oidc_claim_mappings = local.oidc_enabled ? {
     username = { claim = var.oidc.username_claim, prefix = var.oidc.username_prefix }
     groups   = { claim = var.oidc.groups_claim, prefix = var.oidc.groups_prefix }
   } : {}
 
-  oidc_authentication_config = local.oidc_enabled ? yamlencode({
-    apiVersion = "apiserver.config.k8s.io/v1"
-    kind       = "AuthenticationConfiguration"
-    jwt = [{
-      issuer = {
-        url                 = var.oidc.issuer_url
-        audiences           = distinct(concat([var.oidc.client_id], var.oidc.audiences))
-        audienceMatchPolicy = "MatchAny"
-      }
-      # Without a groups claim the users are in no groups
-      claimMappings = { for k, v in local.oidc_claim_mappings : k => v if v.claim != "" }
-    }]
-  }) : ""
-
   # The group as kube-apiserver sees it: the groups claim value with the groups prefix in front
   oidc_admin_group = "${local.oidc_enabled ? var.oidc.groups_prefix : ""}${var.cluster_name}-cluster-admin"
 
   # The group is quoted only when YAML needs it. Quoting the default too would change the
   # rendered config and re-apply it on every control plane
-  oidc_inline_manifests = local.oidc_enabled ? [
+  oidc_inline_manifests = local.oidc_enabled && try(var.oidc.cluster_admin_binding, false) ? [
     {
       name     = "oidc-${var.cluster_name}-cluster-admin"
       contents = <<-EOT
@@ -60,81 +37,71 @@ EOT
     }
   ] : []
 
-  machine = {
-    network = {
-      nameservers = var.nameservers
-    }
-    features = {
-      kubePrism = {
-        enabled = true
-        port    = local.kubeprism_port
-      }
-    }
-    time = {
-      disabled = false
-      servers  = var.time_servers
-    }
-    certSANs = local.cert_sans
-  }
+  # The config is the one Talos generates for talos_version, with the documents below
+  # patched in, one patch per document and in this order. A document with `$patch = "delete"`
+  # takes the generated one out.
 
-  # Cluster settings every node uses
-  cluster = {
-    network = {
-      podSubnets     = var.pod_subnets
-      serviceSubnets = var.service_subnets
-    }
-    discovery = {
-      enabled = var.discovery_enabled
-      registries = {
-        kubernetes = {
-          disabled = true
-        }
-        service = {
-          disabled = false
-          endpoint = var.discovery_service_endpoint
-        }
-      }
-    }
-  }
+  # What every node gets
+  node_config_patches = [
+    yamlencode({ machine = { certSANs = local.cert_sans } }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "ResolverConfig", nameservers = [for address in var.nameservers : { address = address }] }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "TimeSyncConfig", ntp = { servers = var.time_servers } }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNetworkConfig", podSubnets = var.pod_subnets, serviceSubnets = var.service_subnets }),
+    var.discovery_enabled
+    ? yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", endpoint = var.discovery_service_endpoint })
+    : yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", "$patch" = "delete" }),
+  ]
 
-  # Cluster settings Talos only acts on for control planes
-  cluster_controlplane = {
-    allowSchedulingOnControlPlanes = var.allow_scheduling_on_control_planes
-    network = merge(local.cluster.network, {
-      cni = {
-        name = "none"
-      }
-    })
-    proxy = {
-      disabled = true
-    }
-    apiServer = merge({ certSANs = local.cert_sans }, {
-      for k, v in {
-        extraArgs = { authentication-config = local.oidc_authentication_config_path }
-        extraVolumes = [{
-          hostPath  = local.oidc_authentication_config_dir
-          mountPath = local.oidc_authentication_config_dir
-          readonly  = true
+  # Talos generates the node document of a control plane with the NoSchedule taint and a
+  # label that keeps the node out of load balancers. A patch cannot take one label out,
+  # so the document is replaced
+  scheduling_config_patches = var.allow_scheduling_on_control_planes ? [
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNodeConfig", "$patch" = "delete" }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNodeConfig", labels = { "node-role.kubernetes.io/control-plane" = "" } }),
+  ] : []
+
+  # The patch replaces `configuration` as a whole, so `anonymous` repeats what Talos
+  # generates: anonymous requests to the health endpoints only
+  oidc_config_patches = local.oidc_enabled ? [
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeAuthenticationConfig"
+      configuration = {
+        anonymous = {
+          enabled    = true
+          conditions = [{ path = "/livez" }, { path = "/readyz" }, { path = "/healthz" }]
+        }
+        jwt = [{
+          issuer = {
+            url                 = var.oidc.issuer_url
+            audiences           = distinct(concat([var.oidc.client_id], var.oidc.audiences))
+            audienceMatchPolicy = "MatchAny"
+          }
+          # Without a groups claim the users are in no groups
+          claimMappings = { for k, v in local.oidc_claim_mappings : k => v if v.claim != "" }
         }]
-      } : k => v if local.oidc_enabled
-    })
-    inlineManifests = concat(local.oidc_inline_manifests, var.talos_inline_manifests)
-  }
+      }
+    }),
+  ] : []
 
-  # Machine settings only control planes get: the file kube-apiserver reads OIDC from.
-  # kube-apiserver does not run as root, so the file is readable by everyone
-  machine_controlplane = local.oidc_enabled ? {
-    files = [{
-      path        = local.oidc_authentication_config_path
-      op          = "create"
-      permissions = 420 # 0644
-      content     = local.oidc_authentication_config
-    }]
-  } : {}
+  # What only control planes get. No kube-proxy and no Flannel: the cluster brings its own CNI
+  controlplane_config_patches = concat(
+    local.node_config_patches,
+    [
+      yamlencode({ apiVersion = "v1alpha1", kind = "KubeAPIServerConfig", certExtraSANs = local.cert_sans }),
+      yamlencode({ apiVersion = "v1alpha1", kind = "KubeProxyConfig", "$patch" = "delete" }),
+      yamlencode({ apiVersion = "v1alpha1", kind = "KubeFlannelCNIConfig", "$patch" = "delete" }),
+    ],
+    local.scheduling_config_patches,
+    local.oidc_config_patches,
+    [
+      for manifest in concat(local.oidc_inline_manifests, var.talos_inline_manifests) :
+      yamlencode({ apiVersion = "v1alpha1", kind = "KubeInlineManifestConfig", name = manifest.name, manifest = manifest.contents })
+    ],
+  )
 
-  controlplane_config_patches = [yamlencode({ machine = merge(local.machine, local.machine_controlplane), cluster = merge(local.cluster, local.cluster_controlplane) })]
-  worker_config_patches       = [yamlencode({ machine = local.machine, cluster = local.cluster })]
-  config_patches              = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
+  worker_config_patches = local.node_config_patches
+  config_patches        = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
 }
 
 # No preconditions or postconditions here: with one, the data source is read during apply

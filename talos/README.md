@@ -10,23 +10,22 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 - A datastore with the `snippets` content type on every Proxmox host (`snippet_datastore`, default `local`). The full machine config, secrets included, is stored there in plaintext
 - The machine running OpenTofu needs direct access to the node addresses on tcp/50000. Bootstrap, config apply and the kubeconfig go to a node IP, not through the load balancer
 - Worker pools join through the cluster endpoint. Their config apply retries until the control plane answers; to order it explicitly, apply the control-plane module first (`-target=module.controlplane`). Do not put a module-level `depends_on` on this module, see [below](#module-level-depends_on)
-- The module sets the CNI to `none` and disables kube-proxy. Install a CNI with kube-proxy replacement after bootstrap; nodes stay `NotReady` until then
+- Talos 1.14 or later on the nodes, in the template included
+- The module leaves out the CNI and kube-proxy. Install a CNI with kube-proxy replacement after bootstrap; nodes stay `NotReady` until then
 
-`talos_version` is the version contract the machine config is generated for. It does not install or upgrade Talos; upgrades happen outside this module.
+`talos_version` is the version contract the machine config is generated for, `v1.14.2` by default and v1.14 at the least: the config is built from the configuration documents Talos 1.14 introduced. It does not install or upgrade Talos; upgrades happen outside this module. The nodes must run at least that version. `kubernetes_version` defaults to `v1.35.5`.
 
 ## Usage
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.2.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.3.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
   type                       = "controlplane"
   node_keys                  = ["a", "b", "c"]
   cluster_ip                 = "2001:db8::1"
-  talos_version              = "v1.7.0"
-  kubernetes_version         = "1.30.0"
   talos_machine_secrets      = talos_machine_secrets.this.machine_secrets
   talos_client_configuration = talos_machine_secrets.this.client_configuration
   pod_subnets                = ["2001:db8:1000::/56"]
@@ -82,12 +81,7 @@ Any change to the rendered machine config replaces the files under the same name
 
 ## Config changes and reboots
 
-`apply_mode` is passed to every `talos_machine_configuration_apply`. What the default `staged_if_needing_reboot` does depends on the Talos version the node runs:
-
-- Talos before 1.14: during the plan the provider does a dry run against each node whose config changes. A change that needs a reboot is staged, and the plan prints a `Reboot prevented - using staged mode` warning for that node; anything else is applied live.
-- Talos 1.14 and later: Talos itself no longer reboots on a config apply. The config is applied live, and whatever needs a reboot takes effect at the next reboot.
-
-Either way the module does not reboot a node; the part of a change that needs a reboot waits for the next reboot you do. `apply_mode = "staged"` should not be needed to avoid reboots on 1.14 and later, although the provider warning suggests it. It applies nothing live. The 1.14 behaviour is read from the Talos source and release notes, not tested. Reboot one node at a time and wait for it to be healthy, control planes first:
+`apply_mode` is passed to every `talos_machine_configuration_apply`. Talos 1.14 does not reboot on a config apply: the config is applied live, and whatever needs a reboot takes effect at the next reboot. So the module does not reboot a node whatever the mode, and the default `staged_if_needing_reboot` applies live. `apply_mode = "staged"` applies nothing live: the whole change waits for the reboot. This is read from the Talos source and release notes, not tested. Reboot one node at a time and wait for it to be healthy, control planes first:
 
 ```sh
 talosctl -n <node> reboot
@@ -96,8 +90,8 @@ talosctl -n <node> health
 
 Read the plan warnings before applying:
 
-- `Cannot check reboot requirement`: the node could not be reached during the plan. That node gets `auto`, which on a node before 1.14 may reboot it if the change needs it. Fix the access and plan again before applying.
-- `staged_if_needing_reboot is not supported on Talos 1.14+`: printed whatever the nodes run. It is keyed on the provider build (0.12.0 bundles the Talos 1.14 machinery), not on the node version.
+- `Cannot check reboot requirement`: the node could not be reached during the plan. Fix the access and plan again before applying.
+- `staged_if_needing_reboot is not supported on Talos 1.14+`: expected, see above.
 
 The apply itself, not only the plan, contacts nodes on tcp/50000. When a config apply is updated for any reason, the provider sends the config to that node again, also when the config itself is unchanged, and retries for up to 10 minutes (read in the provider source, not tested). One node being down therefore fails the apply.
 
@@ -138,17 +132,32 @@ oidc = {
 
 The claims and prefixes (`username_claim`, `username_prefix`, `groups_claim`, `groups_prefix`) have defaults. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix.
 
-OIDC is set up in an [`AuthenticationConfiguration`](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration) file and not with the `--oidc-*` arguments, which take one audience only. It needs Kubernetes 1.34 or later. The control planes get the file as `/var/lib/apiserver/authentication.yaml`, mounted in kube-apiserver.
+OIDC is set up with the `KubeAuthenticationConfig` document of Talos, which becomes the [`AuthenticationConfiguration`](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration) of kube-apiserver. Talos writes the file and points kube-apiserver at it, so turning OIDC on or changing `oidc` needs no reboot. Anonymous requests are accepted on the health endpoints only (`/livez`, `/readyz`, `/healthz`), as Talos sets it up without OIDC.
 
-Talos writes the file at boot only, so turning OIDC on, or changing `oidc`, takes effect on a control plane when it is rebooted. On Talos 1.14 and later, turn OIDC on with `apply_mode = "staged"`: the API server argument is otherwise applied before the file is there, and kube-apiserver does not start until the reboot.
-
-With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the group `<cluster_name>-cluster-admin` of the identity provider cluster admin. The binding names the group as kube-apiserver sees it, with `groups_prefix` in front: `oidc:<cluster_name>-cluster-admin` by default. With OIDC off there is no binding.
+With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the group `<cluster_name>-cluster-admin` of the identity provider cluster admin. The binding names the group as kube-apiserver sees it, with `groups_prefix` in front: `oidc:<cluster_name>-cluster-admin` by default. With OIDC off there is no binding, and `cluster_admin_binding = false` in `oidc` leaves it out, for a cluster that manages its role bindings itself. Without a binding, a user who logs in through OIDC has no access.
 
 Talos creates the objects of an inline manifest when they are missing and leaves existing ones alone. After changing `groups_prefix` or turning OIDC off on a running cluster, delete the old binding yourself: `kubectl delete clusterrolebinding oidc-<cluster_name>-cluster-admin`. The same goes for `talos_inline_manifests`.
 
 ## Machine config patches
 
-Control planes get one patch: the settings every node uses, the control-plane settings (API server, the OIDC file, CNI `none`, kube-proxy off, scheduling on control planes) and the inline manifests, the OIDC binding first and `talos_inline_manifests` after it. Workers get only the settings every node uses. The `config_patches` output is the patch of the pool's own type. Talos does not act on the others on a worker.
+The config is the one Talos generates for `talos_version`, with one patch per configuration document on top:
+
+| Document | Nodes | What the module sets |
+|---|---|---|
+| `machine` (v1alpha1) | all | `certSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
+| `ResolverConfig` | all | `nameservers` |
+| `TimeSyncConfig` | all | `time_servers` |
+| `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
+| `DiscoveryServiceConfig` | all | `discovery_service_endpoint`, or removed with `discovery_enabled = false` |
+| `KubeAPIServerConfig` | control planes | `certExtraSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
+| `KubeProxyConfig`, `KubeFlannelCNIConfig` | control planes | removed: the cluster brings its own CNI |
+| `KubeNodeConfig` | control planes | with `allow_scheduling_on_control_planes`: no `NoSchedule` taint and no `exclude-from-external-load-balancers` label |
+| `KubeAuthenticationConfig` | control planes | OIDC, with `oidc` |
+| `KubeInlineManifestConfig` | control planes | the OIDC binding, then `talos_inline_manifests` |
+
+KubePrism is on, on port 7445: the Talos default.
+
+Everything else is also what Talos generates. The `config_patches` output is the list of patches of the pool's own type.
 
 ## Module-level depends_on
 
@@ -218,8 +227,9 @@ No modules.
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
 | <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
+| <a name="input_extra_cert_sans"></a> [extra\_cert\_sans](#input\_extra\_cert\_sans) | More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example | `list(string)` | `[]` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
-| <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes Version | `string` | n/a | yes |
+| <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version | `string` | `"v1.35.5"` | no |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |
 | <a name="input_nameservers"></a> [nameservers](#input\_nameservers) | DNS Servers. Use DNS64 if this is a IPv6 only cluster | `list(string)` | <pre>[<br/>  "2606:4700:4700::64"<br/>]</pre> | no |
 | <a name="input_netbox_cluster_name"></a> [netbox\_cluster\_name](#input\_netbox\_cluster\_name) | Name of the Netbox cluster the VMs are registered in | `string` | `"pve"` | no |
@@ -231,7 +241,7 @@ No modules.
 | <a name="input_node_keys"></a> [node\_keys](#input\_node\_keys) | One key per node, known at plan time. Each node is named `<node_prefix><key>` and tracked by its key, so any node can be removed without touching the others. Only a worker pool may be empty | `list(string)` | n/a | yes |
 | <a name="input_node_prefix"></a> [node\_prefix](#input\_node\_prefix) | Prefix for node name. The node's key is appended to form the hostname. Also part of the machine config snippet name, so it must differ between the pools of a cluster | `string` | n/a | yes |
 | <a name="input_node_vlan_vid"></a> [node\_vlan\_vid](#input\_node\_vlan\_vid) | VLAN to place nodes | `number` | n/a | yes |
-| <a name="input_oidc"></a> [oidc](#input\_oidc) | OIDC for kube-apiserver, set up in an AuthenticationConfiguration file: needs Kubernetes 1.34 or later. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding | <pre>object({<br/>    issuer_url      = string<br/>    client_id       = string<br/>    audiences       = optional(list(string), [])<br/>    username_claim  = optional(string, "preferred_username")<br/>    username_prefix = optional(string, "oidc:")<br/>    groups_claim    = optional(string, "groups")<br/>    groups_prefix   = optional(string, "oidc:")<br/>  })</pre> | `null` | no |
+| <a name="input_oidc"></a> [oidc](#input\_oidc) | OIDC for kube-apiserver. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding, which `cluster_admin_binding = false` leaves out | <pre>object({<br/>    issuer_url      = string<br/>    client_id       = string<br/>    audiences       = optional(list(string), [])<br/>    username_claim  = optional(string, "preferred_username")<br/>    username_prefix = optional(string, "oidc:")<br/>    groups_claim    = optional(string, "groups")<br/>    groups_prefix   = optional(string, "oidc:")<br/>    # The ClusterRoleBinding of the group <cluster_name>-cluster-admin<br/>    cluster_admin_binding = optional(bool, true)<br/>  })</pre> | `null` | no |
 | <a name="input_on_boot"></a> [on\_boot](#input\_on\_boot) | Start the VMs when their Proxmox host boots | `bool` | `false` | no |
 | <a name="input_on_destroy"></a> [on\_destroy](#input\_on\_destroy) | What happens to a node when it is removed from the pool. By default the VM is deleted without telling Talos. `{ reset = true }` resets the node first, which makes a control plane leave etcd; the node must be reachable for that. A change only takes effect once applied, see the README | <pre>object({<br/>    graceful = optional(bool, true)<br/>    reset    = optional(bool, false)<br/>    reboot   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_pod_subnets"></a> [pod\_subnets](#input\_pod\_subnets) | k8s pod subnets in CIDR notation, at least one | `list(string)` | n/a | yes |
@@ -243,7 +253,7 @@ No modules.
 | <a name="input_talos_client_configuration"></a> [talos\_client\_configuration](#input\_talos\_client\_configuration) | Talos client configuration, the `client_configuration` attribute of a `talos_machine_secrets` resource | <pre>object({<br/>    ca_certificate     = string<br/>    client_certificate = string<br/>    client_key         = string<br/>  })</pre> | n/a | yes |
 | <a name="input_talos_inline_manifests"></a> [talos\_inline\_manifests](#input\_talos\_inline\_manifests) | Talos Inline Manifests. Only applied through control planes | <pre>list(object({<br/>    name     = string<br/>    contents = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_talos_machine_secrets"></a> [talos\_machine\_secrets](#input\_talos\_machine\_secrets) | Talos machine secrets, the `machine_secrets` attribute of a `talos_machine_secrets` resource | <pre>object({<br/>    certs = object({<br/>      etcd               = object({ cert = string, key = string })<br/>      k8s                = object({ cert = string, key = string })<br/>      k8s_aggregator     = object({ cert = string, key = string })<br/>      k8s_serviceaccount = object({ key = string })<br/>      os                 = object({ cert = string, key = string })<br/>    })<br/>    cluster = object({ id = string, secret = string })<br/>    secrets = object({<br/>      bootstrap_token             = string<br/>      secretbox_encryption_secret = string<br/>      aescbc_encryption_secret    = optional(string)<br/>    })<br/>    trustdinfo = object({ token = string })<br/>  })</pre> | n/a | yes |
-| <a name="input_talos_version"></a> [talos\_version](#input\_talos\_version) | Talos version contract the machine config is generated for (e.g. `v1.11.0`). It does not select the installed Talos image; keep the value the cluster was created with instead of bumping it on every upgrade | `string` | n/a | yes |
+| <a name="input_talos_version"></a> [talos\_version](#input\_talos\_version) | Talos version contract the machine config is generated for, v1.14 or later. It does not select the installed Talos image. The nodes must run at least this version | `string` | `"v1.14.2"` | no |
 | <a name="input_template_node_name"></a> [template\_node\_name](#input\_template\_node\_name) | Proxmox host the template is on | `string` | `"pve1"` | no |
 | <a name="input_template_vm_id"></a> [template\_vm\_id](#input\_template\_vm\_id) | VM ID of the Talos template to clone | `number` | `9201` | no |
 | <a name="input_time_servers"></a> [time\_servers](#input\_time\_servers) | List of time\_servers | `list(string)` | <pre>[<br/>  "time.cloudflare.com"<br/>]</pre> | no |
@@ -255,7 +265,7 @@ No modules.
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | Cluster Name |
-| <a name="output_config_patches"></a> [config\_patches](#output\_config\_patches) | Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests |
+| <a name="output_config_patches"></a> [config\_patches](#output\_config\_patches) | Config patches of the pool, one per configuration document. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests |
 | <a name="output_kubeconfig"></a> [kubeconfig](#output\_kubeconfig) | Kubeconfig. Output only on type controlplane |
 | <a name="output_machine_configuration"></a> [machine\_configuration](#output\_machine\_configuration) | Rendered machine config of the pool, as uploaded in the snippet. Holds the cluster secrets |
 | <a name="output_nodes_by_key"></a> [nodes\_by\_key](#output\_nodes\_by\_key) | Nodes as a map from node key to an object with `name` and `ip`. The keys and names are known at plan time |
