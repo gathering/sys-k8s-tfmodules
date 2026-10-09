@@ -2,7 +2,33 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
-## v0.1.0 - unreleased
+## v0.1.1 - 2026-10-09
+
+A plan on an existing deployment shows in-place updates only: `dns_name` on every node address and every gateway address, the VM description, and the comments on the FortiGate objects. Where DNS is generated from Netbox, as at The Gathering, the `dns_name` values become DNS records.
+
+### Added
+
+- `talos`: every node address gets a `dns_name` in Netbox, `<node_prefix><key>.<domain_name>`. A plan shows an in-place update of each node address (`dns_name` `""` -> `<node>.<domain>`) and nothing else.
+- `fg-vlan`: the gateway address gets a `dns_name` in Netbox, `gw.<name>.<domain_name>`, with the new input `domain_name` (default `gathering.systems`). A plan shows an in-place update of the gateway address. `name` is part of that DNS name: a `name` with spaces or other characters Netbox does not accept in a DNS name is rejected at plan time. Set `domain_name = null` to leave such a VLAN's gateway without a DNS name.
+- `fg-k8slb`: the three VIPs get a comment naming the API and the cluster.
+- `talos`: output `machine_configuration`, the rendered machine config of the pool, sensitive.
+- `talos`, `fg-vlan`: `domain_name` must be a DNS domain.
+
+### Changed
+
+- FortiGate comments say what an object is for instead of `<name> - Created by Terraform Provider for FortiOS`. A plan shows an in-place update of each:
+  - `fg-vlan`: interface `<name> (VLAN <vid>). Managed by OpenTofu`, address object `Prefix of <name> (VLAN <vid>). Managed by OpenTofu`.
+  - `fg-bgp-neighbors`: prefix lists `Prefixes accepted from Kubernetes cluster <cluster_name>. Managed by OpenTofu` and `Nothing is advertised to Kubernetes cluster <cluster_name>. Managed by OpenTofu`. The neighbor descriptions are unchanged.
+  - `fg-policy`: the default comment is `Managed by OpenTofu`; set `comments` to say what the policy is for.
+  - `fg-k8slb`: the policy comment is `Kubernetes and Talos API of cluster <cluster_name>. Managed by OpenTofu`.
+
+- `talos`: the default VM `description` names the cluster and the node type, `Talos <type> node of Kubernetes cluster <cluster_name>. Managed by OpenTofu: changes made here are overwritten.`, instead of `Managed by Undercloud (Terraform)`. A plan shows an in-place update of the description on every VM that uses the default. `description` still overrides it.
+
+### Fixed
+
+- `talos`: a change pending on a resource the machine config is built from, such as an in-place update of the cluster address, no longer replaces every snippet file and re-applies the config on every node, as long as the value the config uses is known at plan time. A value that is only known after apply, such as a prefix allocated in the same run, still does. The precondition that rejects an empty control-plane pool made OpenTofu read the machine configuration during apply; it is now on the `cluster_name` output. An empty control-plane pool still fails at plan time, with the same message.
+
+## v0.1.0 - 2026-10-09
 
 The first release meant to be pinned. It changes the interface of all five modules compared to `main` before it, which consumers tracked unpinned, and it tracks nodes by key instead of by position. There is no in-place upgrade from the modules before it: clusters are redeployed, see [UPGRADING.md](./UPGRADING.md).
 

@@ -7,7 +7,7 @@ resource "fortios_firewall_policy" "this" {
   schedule         = "always"
   ssl_ssh_profile  = var.ssl_ssh_profile
   status           = "enable"
-  comments         = var.comments != null ? var.comments : "${var.name} - Created by Terraform Provider for FortiOS"
+  comments         = var.comments != null ? var.comments : "Managed by OpenTofu"
 
   # Null leaves nat unset, which is not the same to the provider as "disable"
   nat    = var.nat == null ? null : var.nat ? "enable" : "disable"

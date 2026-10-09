@@ -106,8 +106,8 @@ run "second_instance_for_a_cluster" {
   }
 
   assert {
-    condition     = fortios_router_prefixlist6.in.comments == "Cluster: test - Prefix list in"
-    error_message = "The comment must still name the cluster."
+    condition     = fortios_router_prefixlist6.in.comments == "Prefixes accepted from Kubernetes cluster test. Managed by OpenTofu" && fortios_router_prefixlist6.out.comments == "Nothing is advertised to Kubernetes cluster test. Managed by OpenTofu"
+    error_message = "The comments must name the cluster even when prefix_list_name is set."
   }
 }
 

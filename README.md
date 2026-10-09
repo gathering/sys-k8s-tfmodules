@@ -34,13 +34,13 @@ locals {
 }
 
 module "vlan" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-vlan?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-vlan?ref=v0.1.1"
   name   = "my-cluster"
   # ...
 }
 
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.1"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -56,7 +56,7 @@ module "controlplane" {
 }
 
 module "workers" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.1"
 
   node_prefix = "my-cluster-w-"
   type        = "worker"
@@ -65,7 +65,7 @@ module "workers" {
 }
 
 module "k8s_lb" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-k8slb?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-k8slb?ref=v0.1.1"
 
   cluster_name = "my-cluster"
   extip        = local.cluster_ip
@@ -77,7 +77,7 @@ module "k8s_lb" {
 }
 
 module "bgp_neighbors" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-bgp-neighbors?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-bgp-neighbors?ref=v0.1.1"
 
   cluster_name = "my-cluster"
   neighbors_by_key = {

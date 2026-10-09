@@ -1,4 +1,6 @@
 locals {
+  description = var.description != null ? var.description : "Talos ${var.type} node of Kubernetes cluster ${var.cluster_name}. Managed by OpenTofu: changes made here are overwritten."
+
   # Hosts that get the snippet. VMs can migrate, so that is every host unless pinned
   proxmox_nodes = var.proxmox_nodes != null ? var.proxmox_nodes : data.proxmox_virtual_environment_nodes.available_nodes[0].names
 
@@ -34,7 +36,7 @@ resource "proxmox_virtual_environment_vm" "this" {
   for_each = toset(var.node_keys)
 
   name        = netbox_virtual_machine.this[each.key].name
-  description = var.description
+  description = local.description
   tags        = var.tags
   # By position in node_keys when the VM is created
   node_name       = element(local.placement_nodes, local.key_index[each.key])

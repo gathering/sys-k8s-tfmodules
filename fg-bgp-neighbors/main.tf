@@ -18,7 +18,7 @@ resource "fortios_routerbgp_neighbor" "this" {
 
 resource "fortios_router_prefixlist6" "in" {
   name     = "${local.prefix_list_name}-in"
-  comments = "Cluster: ${var.cluster_name} - Prefix list in"
+  comments = "Prefixes accepted from Kubernetes cluster ${var.cluster_name}. Managed by OpenTofu"
 
   dynamic "rule" {
     for_each = var.prefixes
@@ -36,7 +36,7 @@ resource "fortios_router_prefixlist6" "in" {
 # Advertise nothing to the cluster: the nodes reach everything through their default route
 resource "fortios_router_prefixlist6" "out" {
   name     = "${local.prefix_list_name}-out"
-  comments = "Cluster: ${var.cluster_name} - Prefix list out"
+  comments = "Nothing is advertised to Kubernetes cluster ${var.cluster_name}. Managed by OpenTofu"
 
   rule {
     id      = 1

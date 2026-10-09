@@ -41,6 +41,7 @@ resource "netbox_available_ip_address" "this" {
   status       = "active"
   interface_id = netbox_interface.this[each.key].id
   object_type  = "virtualization.vminterface"
+  dns_name     = "${var.node_prefix}${each.key}.${var.domain_name}"
 
   lifecycle {
     precondition {

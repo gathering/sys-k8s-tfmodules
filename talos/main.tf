@@ -1,5 +1,5 @@
 locals {
-  # False for an empty control-plane pool too, which the precondition on the machine configuration rejects
+  # False for an empty control-plane pool too, which the precondition on the cluster_name output rejects
   bootstrap = var.type == "controlplane" && length(var.node_keys) > 0
 
   # Position of a key in node_keys. Only decides the host a new VM is created on

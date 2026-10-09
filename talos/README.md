@@ -18,7 +18,7 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.1"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -42,7 +42,7 @@ A complete cluster with all five modules is in [`examples/full-cluster`](../exam
 
 ## Node keys
 
-`node_keys` has one key per node. A node is named `<node_prefix><key>`, for example `my-cluster-cp-a`, and every per-node resource is tracked by that key (`...this["a"]`).
+`node_keys` has one key per node. A node is named `<node_prefix><key>`, for example `my-cluster-cp-a`, its address gets the DNS name `<node_prefix><key>.<domain_name>` in Netbox, and every per-node resource is tracked by that key (`...this["a"]`).
 
 - The list must be known at plan time: write the keys out, do not derive them from a resource.
 - A key is part of the hostname and never changes for a node. Adding a key adds a node; removing a key destroys that node's VM, Netbox records and address, and nothing of the other nodes. Reordering the list changes nothing on existing nodes.
@@ -198,12 +198,12 @@ No modules.
 | <a name="input_cores"></a> [cores](#input\_cores) | Number of CPU Cores per node | `number` | `2` | no |
 | <a name="input_cpu_type"></a> [cpu\_type](#input\_cpu\_type) | Proxmox CPU Type | `string` | `"Skylake-Server-noTSX-IBRS"` | no |
 | <a name="input_datastore"></a> [datastore](#input\_datastore) | Proxmox Datastore | `string` | `"ceph1"` | no |
-| <a name="input_description"></a> [description](#input\_description) | Proxmox VM description | `string` | `"Managed by Undercloud (Terraform)"` | no |
+| <a name="input_description"></a> [description](#input\_description) | Proxmox VM description. Defaults to a text naming the cluster, the node type and that the VM is managed by OpenTofu | `string` | `null` | no |
 | <a name="input_device_networkcard_name"></a> [device\_networkcard\_name](#input\_device\_networkcard\_name) | Netbox nic name | `string` | `"eth0"` | no |
 | <a name="input_discovery_enabled"></a> [discovery\_enabled](#input\_discovery\_enabled) | Enable Talos Discovery | `bool` | `true` | no |
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
-| <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS Domain Name | `string` | `"gathering.systems"` | no |
+| <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes Version | `string` | n/a | yes |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |
@@ -243,6 +243,7 @@ No modules.
 | <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | Cluster Name |
 | <a name="output_config_patches"></a> [config\_patches](#output\_config\_patches) | Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests |
 | <a name="output_kubeconfig"></a> [kubeconfig](#output\_kubeconfig) | Kubeconfig. Output only on type controlplane |
+| <a name="output_machine_configuration"></a> [machine\_configuration](#output\_machine\_configuration) | Rendered machine config of the pool, as uploaded in the snippet. Holds the cluster secrets |
 | <a name="output_nodes_by_key"></a> [nodes\_by\_key](#output\_nodes\_by\_key) | Nodes as a map from node key to an object with `name` and `ip`. The keys and names are known at plan time |
 | <a name="output_talosconfig"></a> [talosconfig](#output\_talosconfig) | Talosctl config. Output only on type controlplane |
 <!-- END_TF_DOCS -->

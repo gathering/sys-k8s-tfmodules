@@ -279,10 +279,9 @@ variable "tags" {
 }
 
 variable "description" {
-  description = "Proxmox VM description"
+  description = "Proxmox VM description. Defaults to a text naming the cluster, the node type and that the VM is managed by OpenTofu"
   type        = string
-  default     = "Managed by Undercloud (Terraform)"
-  nullable    = false
+  default     = null
 }
 
 variable "vm_bridge" {
@@ -293,10 +292,15 @@ variable "vm_bridge" {
 }
 
 variable "domain_name" {
-  description = "DNS Domain Name"
+  description = "DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`)"
   type        = string
   default     = "gathering.systems"
   nullable    = false
+
+  validation {
+    condition     = can(regex("^[0-9A-Za-z_-]+(\\.[0-9A-Za-z_-]+)*$", var.domain_name))
+    error_message = "domain_name must be a DNS domain: labels of letters, digits, hyphens and underscores, separated by dots."
+  }
 }
 
 variable "time_servers" {

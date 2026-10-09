@@ -16,7 +16,7 @@ The following objects must already exist on the FortiGate:
 
 ```hcl
 module "policy" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-policy?ref=v0.1.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-policy?ref=v0.1.1"
 
   name     = "k8s-egress"
   srcintf  = ["vlan100"]
@@ -63,7 +63,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_comments"></a> [comments](#input\_comments) | Policy comment. Defaults to `<name> - Created by Terraform Provider for FortiOS` | `string` | `null` | no |
+| <a name="input_comments"></a> [comments](#input\_comments) | Policy comment: say what the policy is for. Defaults to `Managed by OpenTofu` | `string` | `null` | no |
 | <a name="input_dstaddr6"></a> [dstaddr6](#input\_dstaddr6) | Destination IPv6 addresses | `list(string)` | n/a | yes |
 | <a name="input_dstintf"></a> [dstintf](#input\_dstintf) | Destination interfaces | `list(string)` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name of policy | `string` | n/a | yes |

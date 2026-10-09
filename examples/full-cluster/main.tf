@@ -3,7 +3,7 @@
 #
 # The module sources are relative so that CI validates this example against the modules of
 # the same commit. In your own root module, pin a release instead:
-#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.0"
+#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.1"
 
 # Endpoints and credentials come from the providers' environment variables
 provider "netbox" {}
