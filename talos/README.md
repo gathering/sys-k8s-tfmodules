@@ -18,7 +18,7 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.1.1"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.2.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -126,7 +126,21 @@ oidc = {
 }
 ```
 
-The claims and prefixes (`username_claim`, `username_prefix`, `groups_claim`, `groups_prefix`) have defaults. Set one to `""` to leave it out of the API server arguments.
+`audiences` lists more audiences to accept tokens for, next to `client_id`: the client of a dashboard that passes the token of its user on to the API server, for example.
+
+```hcl
+oidc = {
+  issuer_url = "https://sso.example.org/realms/my-realm"
+  client_id  = "kubernetes"
+  audiences  = ["kubernetes-dashboard"]
+}
+```
+
+The claims and prefixes (`username_claim`, `username_prefix`, `groups_claim`, `groups_prefix`) have defaults. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix.
+
+OIDC is set up in an [`AuthenticationConfiguration`](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration) file and not with the `--oidc-*` arguments, which take one audience only. It needs Kubernetes 1.34 or later. The control planes get the file as `/var/lib/apiserver/authentication.yaml`, mounted in kube-apiserver.
+
+Talos writes the file at boot only, so turning OIDC on, or changing `oidc`, takes effect on a control plane when it is rebooted. On Talos 1.14 and later, turn OIDC on with `apply_mode = "staged"`: the API server argument is otherwise applied before the file is there, and kube-apiserver does not start until the reboot.
 
 With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the group `<cluster_name>-cluster-admin` of the identity provider cluster admin. The binding names the group as kube-apiserver sees it, with `groups_prefix` in front: `oidc:<cluster_name>-cluster-admin` by default. With OIDC off there is no binding.
 
@@ -134,7 +148,7 @@ Talos creates the objects of an inline manifest when they are missing and leaves
 
 ## Machine config patches
 
-Control planes get one patch: the settings every node uses, the control-plane settings (API server, CNI `none`, kube-proxy off, scheduling on control planes) and the inline manifests, the OIDC binding first and `talos_inline_manifests` after it. Workers get only the settings every node uses. The `config_patches` output is the patch of the pool's own type. Talos does not act on the others on a worker.
+Control planes get one patch: the settings every node uses, the control-plane settings (API server, the OIDC file, CNI `none`, kube-proxy off, scheduling on control planes) and the inline manifests, the OIDC binding first and `talos_inline_manifests` after it. Workers get only the settings every node uses. The `config_patches` output is the patch of the pool's own type. Talos does not act on the others on a worker.
 
 ## Module-level depends_on
 
@@ -217,7 +231,7 @@ No modules.
 | <a name="input_node_keys"></a> [node\_keys](#input\_node\_keys) | One key per node, known at plan time. Each node is named `<node_prefix><key>` and tracked by its key, so any node can be removed without touching the others. Only a worker pool may be empty | `list(string)` | n/a | yes |
 | <a name="input_node_prefix"></a> [node\_prefix](#input\_node\_prefix) | Prefix for node name. The node's key is appended to form the hostname. Also part of the machine config snippet name, so it must differ between the pools of a cluster | `string` | n/a | yes |
 | <a name="input_node_vlan_vid"></a> [node\_vlan\_vid](#input\_node\_vlan\_vid) | VLAN to place nodes | `number` | n/a | yes |
-| <a name="input_oidc"></a> [oidc](#input\_oidc) | OIDC for kube-apiserver. Null leaves OIDC off. Set a claim or prefix to `""` to leave it out of the API server arguments. `groups_prefix` is also put in front of the group in the cluster-admin binding | <pre>object({<br/>    issuer_url      = string<br/>    client_id       = string<br/>    username_claim  = optional(string, "preferred_username")<br/>    username_prefix = optional(string, "oidc:")<br/>    groups_claim    = optional(string, "groups")<br/>    groups_prefix   = optional(string, "oidc:")<br/>  })</pre> | `null` | no |
+| <a name="input_oidc"></a> [oidc](#input\_oidc) | OIDC for kube-apiserver, set up in an AuthenticationConfiguration file: needs Kubernetes 1.34 or later. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding | <pre>object({<br/>    issuer_url      = string<br/>    client_id       = string<br/>    audiences       = optional(list(string), [])<br/>    username_claim  = optional(string, "preferred_username")<br/>    username_prefix = optional(string, "oidc:")<br/>    groups_claim    = optional(string, "groups")<br/>    groups_prefix   = optional(string, "oidc:")<br/>  })</pre> | `null` | no |
 | <a name="input_on_boot"></a> [on\_boot](#input\_on\_boot) | Start the VMs when their Proxmox host boots | `bool` | `false` | no |
 | <a name="input_on_destroy"></a> [on\_destroy](#input\_on\_destroy) | What happens to a node when it is removed from the pool. By default the VM is deleted without telling Talos. `{ reset = true }` resets the node first, which makes a control plane leave etcd; the node must be reachable for that. A change only takes effect once applied, see the README | <pre>object({<br/>    graceful = optional(bool, true)<br/>    reset    = optional(bool, false)<br/>    reboot   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_pod_subnets"></a> [pod\_subnets](#input\_pod\_subnets) | k8s pod subnets in CIDR notation, at least one | `list(string)` | n/a | yes |

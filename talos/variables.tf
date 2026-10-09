@@ -363,10 +363,11 @@ variable "allow_scheduling_on_control_planes" {
 }
 
 variable "oidc" {
-  description = "OIDC for kube-apiserver. Null leaves OIDC off. Set a claim or prefix to `\"\"` to leave it out of the API server arguments. `groups_prefix` is also put in front of the group in the cluster-admin binding"
+  description = "OIDC for kube-apiserver, set up in an AuthenticationConfiguration file: needs Kubernetes 1.34 or later. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `\"\"` to give the users no groups, and a prefix to `\"\"` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding"
   type = object({
     issuer_url      = string
     client_id       = string
+    audiences       = optional(list(string), [])
     username_claim  = optional(string, "preferred_username")
     username_prefix = optional(string, "oidc:")
     groups_claim    = optional(string, "groups")
@@ -375,8 +376,13 @@ variable "oidc" {
   default = null
 
   validation {
-    condition     = var.oidc == null ? true : alltrue([for v in [var.oidc.issuer_url, var.oidc.client_id] : v != null && v != ""])
-    error_message = "oidc needs both issuer_url and client_id: kube-apiserver does not start with only one of them. Set oidc to null to turn OIDC off."
+    condition     = var.oidc == null ? true : alltrue([for v in [var.oidc.issuer_url, var.oidc.client_id, var.oidc.username_claim] : v != null && v != ""])
+    error_message = "oidc needs issuer_url, client_id and username_claim: kube-apiserver does not start without them. Set oidc to null to turn OIDC off."
+  }
+
+  validation {
+    condition     = var.oidc == null ? true : alltrue([for v in var.oidc.audiences : v != null && v != ""])
+    error_message = "oidc.audiences must not have an empty entry."
   }
 }
 
