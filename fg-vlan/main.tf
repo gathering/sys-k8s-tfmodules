@@ -1,10 +1,14 @@
+locals {
+  gateway = "${cidrhost(netbox_available_prefix.this.prefix, 1)}/${netbox_available_prefix.this.prefix_length}"
+}
+
 ## Get data from netbox
 data "netbox_vlan_group" "this" {
-  name = var.vlan_group
+  name = var.netbox_vlan_group_name
 }
 
 data "netbox_prefix" "this" {
-  prefix = var.base_prefix
+  prefix = var.netbox_base_prefix
 }
 
 ## Create VLAN in Netbox
@@ -28,7 +32,7 @@ resource "netbox_available_prefix" "this" {
 
 ## Reserve gateway in Netbox
 resource "netbox_ip_address" "gw" {
-  ip_address  = "${cidrhost(netbox_available_prefix.this.prefix, 1)}/${netbox_available_prefix.this.prefix_length}"
+  ip_address  = local.gateway
   status      = "reserved"
   description = "Reserved for default gateway ${var.name} (VLAN ${netbox_available_vlan.this.vid})"
 }
@@ -49,7 +53,7 @@ resource "fortios_system_interface" "this" {
   description           = "${var.name} - Created by Terraform Provider for FortiOS"
   ipv6 {
     ip6_mode        = "static"
-    ip6_address     = "${cidrhost(netbox_available_prefix.this.prefix, 1)}/${netbox_available_prefix.this.prefix_length}"
+    ip6_address     = local.gateway
     ip6_allowaccess = "ping"
   }
 }

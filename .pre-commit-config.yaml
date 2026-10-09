@@ -1,0 +1,65 @@
+# Mirrors .github/workflows/ci.yml. Needs tofu, tflint and terraform-docs on PATH.
+repos:
+  - repo: local
+    hooks:
+      - id: tofu-fmt
+        name: tofu fmt
+        entry: tofu fmt -check -recursive -diff .
+        language: system
+        files: \.(tf|tftest\.hcl)$
+        pass_filenames: false
+
+      - id: tofu-validate
+        name: tofu validate
+        # Runs in a copy so no .terraform directory or lock file lands in the repo. The copy
+        # keeps the repo layout: fg-k8slb and the example use relative module sources
+        entry: >-
+          bash -c 'set -eu;
+          tmp="$(mktemp -d)";
+          trap "rm -rf \"$tmp\"" EXIT;
+          mkdir "$tmp/examples";
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan examples/full-cluster; do
+          cp -R "$dir" "$tmp/$dir";
+          done;
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan examples/full-cluster; do
+          (cd "$tmp/$dir" && tofu init -backend=false -input=false >/dev/null && tofu validate);
+          done'
+        language: system
+        files: \.(tf|tftest\.hcl)$
+        pass_filenames: false
+
+      - id: tofu-test
+        name: tofu test
+        # Providers are mocked: no credentials needed. Runs in a copy like tofu validate
+        entry: >-
+          bash -c 'set -eu;
+          tmp="$(mktemp -d)";
+          trap "rm -rf \"$tmp\"" EXIT;
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan; do
+          cp -R "$dir" "$tmp/$dir";
+          done;
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan; do
+          (cd "$tmp/$dir" && tofu init -backend=false -input=false >/dev/null && tofu test);
+          done'
+        language: system
+        files: ^(talos|fg-[a-z0-9-]+)/.*\.(tf|tftest\.hcl)$
+        pass_filenames: false
+
+      - id: tflint
+        name: tflint
+        # --recursive looks for the config in each module, so pass it by absolute path
+        entry: bash -c 'tflint --recursive --config "$PWD/.tflint.hcl"'
+        language: system
+        files: (\.tf|\.tflint\.hcl)$
+        pass_filenames: false
+
+      - id: terraform-docs
+        name: terraform-docs
+        entry: >-
+          bash -c 'set -eu;
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan; do
+          terraform-docs --output-check "$dir";
+          done'
+        language: system
+        files: (\.tf|README\.md|\.terraform-docs\.yml)$
+        pass_filenames: false

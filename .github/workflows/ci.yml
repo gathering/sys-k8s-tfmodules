@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TFLINT_VERSION: v0.64.0
+  TERRAFORM_DOCS_VERSION: v0.24.0
+  TERRAFORM_DOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive -diff .
+
+  validate:
+    name: validate ${{ matrix.module }} (tofu ${{ matrix.tofu }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - talos
+          - fg-bgp-neighbors
+          - fg-k8slb
+          - fg-policy
+          - fg-vlan
+          # Uses relative module sources, so it validates the modules of this commit together.
+          # So does fg-k8slb, which calls ../fg-policy
+          - examples/full-cluster
+        # Oldest supported release (required_version) and newest
+        tofu:
+          - ~1.8.0
+          - latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ matrix.tofu }}
+          tofu_wrapper: false
+      - run: tofu init -backend=false -input=false
+      - run: tofu validate
+
+  test:
+    name: test ${{ matrix.module }} (tofu ${{ matrix.tofu }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Modules with a tests directory. Providers are mocked: no credentials needed
+        module:
+          - talos
+          - fg-bgp-neighbors
+          - fg-k8slb
+          - fg-policy
+          - fg-vlan
+        tofu:
+          - ~1.8.0
+          - latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ matrix.tofu }}
+          tofu_wrapper: false
+      - run: tofu init -backend=false -input=false
+      - run: tofu test
+
+  tflint:
+    name: tflint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      # --recursive looks for the config in each module, so pass it by absolute path
+      - run: tflint --recursive --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
+  docs:
+    name: terraform-docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install terraform-docs
+        run: |
+          file="terraform-docs-${TERRAFORM_DOCS_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLo "$file" "https://github.com/terraform-docs/terraform-docs/releases/download/${TERRAFORM_DOCS_VERSION}/${file}"
+          echo "${TERRAFORM_DOCS_SHA256}  ${file}" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$file" -C "$RUNNER_TEMP/bin" terraform-docs
+          rm "$file"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Check generated READMEs
+        run: |
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan; do
+            terraform-docs --output-check "$dir"
+          done

@@ -1,16 +1,11 @@
-output "name" {
+output "cluster_name" {
   description = "Cluster Name"
   value       = var.cluster_name
 }
 
-output "nodes" {
-  description = "List of all nodes"
-  value       = [for node in proxmox_virtual_environment_vm.this[*] : { name = node.name, ip = trimsuffix(node.initialization[0].ip_config[0].ipv6[0].address, "/64") }]
-}
-
-output "nodes_ip" {
-  description = "List of IPv6 address to all nodes"
-  value       = [for ip in netbox_available_ip_address.this[*].ip_address : trimsuffix(ip, "/64")]
+output "nodes_by_key" {
+  description = "Nodes as a map from node key to an object with `name` and `ip`. The keys and names are known at plan time"
+  value       = { for i, key in var.node_keys : key => { name = "${var.node_prefix}${key}", ip = local.node_ips[i] } }
 }
 
 output "talosconfig" {
@@ -22,15 +17,10 @@ output "talosconfig" {
 output "kubeconfig" {
   description = "Kubeconfig. Output only on type controlplane"
   sensitive   = true
-  value       = var.type == "controlplane" ? talos_cluster_kubeconfig.this[0].kubeconfig_raw : ""
+  value       = local.bootstrap ? talos_cluster_kubeconfig.this[0].kubeconfig_raw : ""
 }
 
-output "controlplane_config_patches" {
-  description = "Controlplane config patches"
-  value       = local.controlplane_config_patches
-}
-
-output "worker_config_patches" {
-  description = "Worker config patches"
-  value       = local.worker_config_patches
+output "config_patches" {
+  description = "Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests"
+  value       = local.config_patches
 }
