@@ -170,6 +170,13 @@ variable "cluster_ip" {
   nullable    = false
 }
 
+variable "extra_cert_sans" {
+  description = "More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example"
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "cpu_type" {
   description = "Proxmox CPU Type"
   type        = string
@@ -370,7 +377,7 @@ variable "allow_scheduling_on_control_planes" {
 }
 
 variable "oidc" {
-  description = "OIDC for kube-apiserver, set up in an AuthenticationConfiguration file: needs Kubernetes 1.34 or later. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `\"\"` to give the users no groups, and a prefix to `\"\"` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding"
+  description = "OIDC for kube-apiserver. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `\"\"` to give the users no groups, and a prefix to `\"\"` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding, which `cluster_admin_binding = false` leaves out"
   type = object({
     issuer_url      = string
     client_id       = string
@@ -379,6 +386,8 @@ variable "oidc" {
     username_prefix = optional(string, "oidc:")
     groups_claim    = optional(string, "groups")
     groups_prefix   = optional(string, "oidc:")
+    # The ClusterRoleBinding of the group <cluster_name>-cluster-admin
+    cluster_admin_binding = optional(bool, true)
   })
   default = null
 

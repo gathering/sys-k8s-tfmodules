@@ -134,7 +134,7 @@ The claims and prefixes (`username_claim`, `username_prefix`, `groups_claim`, `g
 
 OIDC is set up with the `KubeAuthenticationConfig` document of Talos, which becomes the [`AuthenticationConfiguration`](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration) of kube-apiserver. Talos writes the file and points kube-apiserver at it, so turning OIDC on or changing `oidc` needs no reboot. Anonymous requests are accepted on the health endpoints only (`/livez`, `/readyz`, `/healthz`), as Talos sets it up without OIDC.
 
-With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the group `<cluster_name>-cluster-admin` of the identity provider cluster admin. The binding names the group as kube-apiserver sees it, with `groups_prefix` in front: `oidc:<cluster_name>-cluster-admin` by default. With OIDC off there is no binding.
+With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the group `<cluster_name>-cluster-admin` of the identity provider cluster admin. The binding names the group as kube-apiserver sees it, with `groups_prefix` in front: `oidc:<cluster_name>-cluster-admin` by default. With OIDC off there is no binding, and `cluster_admin_binding = false` in `oidc` leaves it out, for a cluster that manages its role bindings itself. Without a binding, a user who logs in through OIDC has no access.
 
 Talos creates the objects of an inline manifest when they are missing and leaves existing ones alone. After changing `groups_prefix` or turning OIDC off on a running cluster, delete the old binding yourself: `kubectl delete clusterrolebinding oidc-<cluster_name>-cluster-admin`. The same goes for `talos_inline_manifests`.
 
@@ -144,19 +144,20 @@ The config is the one Talos generates for `talos_version`, with one patch per co
 
 | Document | Nodes | What the module sets |
 |---|---|---|
-| `machine` (v1alpha1) | all | `certSANs`: `localhost` and `cluster_ip` |
+| `machine` (v1alpha1) | all | `certSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
 | `ResolverConfig` | all | `nameservers` |
 | `TimeSyncConfig` | all | `time_servers` |
-| `KubePrismConfig` | all | port 7445 |
 | `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
 | `DiscoveryServiceConfig` | all | `discovery_service_endpoint`, or removed with `discovery_enabled = false` |
-| `KubeAPIServerConfig` | control planes | `certExtraSANs`: `localhost` and `cluster_ip` |
+| `KubeAPIServerConfig` | control planes | `certExtraSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
 | `KubeProxyConfig`, `KubeFlannelCNIConfig` | control planes | removed: the cluster brings its own CNI |
-| `KubeNodeConfig` | control planes | the taints removed, with `allow_scheduling_on_control_planes` |
+| `KubeNodeConfig` | control planes | with `allow_scheduling_on_control_planes`: no `NoSchedule` taint and no `exclude-from-external-load-balancers` label |
 | `KubeAuthenticationConfig` | control planes | OIDC, with `oidc` |
 | `KubeInlineManifestConfig` | control planes | the OIDC binding, then `talos_inline_manifests` |
 
-Everything else is what Talos generates. The `config_patches` output is the list of patches of the pool's own type.
+KubePrism is on, on port 7445: the Talos default.
+
+Everything else is also what Talos generates. The `config_patches` output is the list of patches of the pool's own type.
 
 ## Module-level depends_on
 
@@ -226,6 +227,7 @@ No modules.
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
 | <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
+| <a name="input_extra_cert_sans"></a> [extra\_cert\_sans](#input\_extra\_cert\_sans) | More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example | `list(string)` | `[]` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version | `string` | `"v1.35.5"` | no |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |
@@ -239,7 +241,7 @@ No modules.
 | <a name="input_node_keys"></a> [node\_keys](#input\_node\_keys) | One key per node, known at plan time. Each node is named `<node_prefix><key>` and tracked by its key, so any node can be removed without touching the others. Only a worker pool may be empty | `list(string)` | n/a | yes |
 | <a name="input_node_prefix"></a> [node\_prefix](#input\_node\_prefix) | Prefix for node name. The node's key is appended to form the hostname. Also part of the machine config snippet name, so it must differ between the pools of a cluster | `string` | n/a | yes |
 | <a name="input_node_vlan_vid"></a> [node\_vlan\_vid](#input\_node\_vlan\_vid) | VLAN to place nodes | `number` | n/a | yes |
-| <a name="input_oidc"></a> [oidc](#input\_oidc) | OIDC for kube-apiserver, set up in an AuthenticationConfiguration file: needs Kubernetes 1.34 or later. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding | <pre>object({<br/>    issuer_url      = string<br/>    client_id       = string<br/>    audiences       = optional(list(string), [])<br/>    username_claim  = optional(string, "preferred_username")<br/>    username_prefix = optional(string, "oidc:")<br/>    groups_claim    = optional(string, "groups")<br/>    groups_prefix   = optional(string, "oidc:")<br/>  })</pre> | `null` | no |
+| <a name="input_oidc"></a> [oidc](#input\_oidc) | OIDC for kube-apiserver. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `""` to give the users no groups, and a prefix to `""` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding, which `cluster_admin_binding = false` leaves out | <pre>object({<br/>    issuer_url      = string<br/>    client_id       = string<br/>    audiences       = optional(list(string), [])<br/>    username_claim  = optional(string, "preferred_username")<br/>    username_prefix = optional(string, "oidc:")<br/>    groups_claim    = optional(string, "groups")<br/>    groups_prefix   = optional(string, "oidc:")<br/>    # The ClusterRoleBinding of the group <cluster_name>-cluster-admin<br/>    cluster_admin_binding = optional(bool, true)<br/>  })</pre> | `null` | no |
 | <a name="input_on_boot"></a> [on\_boot](#input\_on\_boot) | Start the VMs when their Proxmox host boots | `bool` | `false` | no |
 | <a name="input_on_destroy"></a> [on\_destroy](#input\_on\_destroy) | What happens to a node when it is removed from the pool. By default the VM is deleted without telling Talos. `{ reset = true }` resets the node first, which makes a control plane leave etcd; the node must be reachable for that. A change only takes effect once applied, see the README | <pre>object({<br/>    graceful = optional(bool, true)<br/>    reset    = optional(bool, false)<br/>    reboot   = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_pod_subnets"></a> [pod\_subnets](#input\_pod\_subnets) | k8s pod subnets in CIDR notation, at least one | `list(string)` | n/a | yes |

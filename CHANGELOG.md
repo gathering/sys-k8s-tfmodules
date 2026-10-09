@@ -8,11 +8,18 @@ All notable changes to these modules are listed here. Versions are git tags; pin
 
 A plan on an existing cluster shows the machine config of every node changing, workers included: the snippet files are replaced and the config is re-applied. Not applied to a running cluster: rendering is tested, and the result passes `talosctl validate`.
 
+### Added
+
+- `talos`: `extra_cert_sans`, more names and addresses for the certificates of the Kubernetes API and the Talos API.
+- `talos`: `oidc.cluster_admin_binding`, default `true`. `false` leaves the `ClusterRoleBinding` of `<cluster_name>-cluster-admin` out.
+
 ### Changed
 
 - `talos`: `talos_version` defaults to `v1.14.2` and `kubernetes_version` to `v1.35.5`. Both were required.
 - `talos`: OIDC is set up with the `KubeAuthenticationConfig` document. Talos owns the file, so turning OIDC on or changing `oidc` applies without a reboot. The file under `/var/lib/apiserver` of v0.2.0, its mount and the `authentication-config` argument are gone; v0.2.0 broke kube-apiserver when OIDC was applied to a running cluster, because Talos only writes such a file at boot.
-- `talos`: the module's settings are patched in as one document each instead of one `machine`/`cluster` patch: `ResolverConfig`, `TimeSyncConfig`, `KubePrismConfig`, `KubeNetworkConfig`, `DiscoveryServiceConfig`, `KubeAPIServerConfig`, `KubeNodeConfig`, `KubeAuthenticationConfig` and `KubeInlineManifestConfig`. kube-proxy and Flannel are left out by removing their documents. The `config_patches` output is a list of those patches.
+- `talos`: the module's settings are patched in as one document each instead of one `machine`/`cluster` patch: `ResolverConfig`, `TimeSyncConfig`, `KubeNetworkConfig`, `DiscoveryServiceConfig`, `KubeAPIServerConfig`, `KubeNodeConfig`, `KubeAuthenticationConfig` and `KubeInlineManifestConfig`. kube-proxy and Flannel are left out by removing their documents. The `config_patches` output is a list of those patches.
+- `talos`: with `allow_scheduling_on_control_planes`, a control plane also loses the `node.kubernetes.io/exclude-from-external-load-balancers` label, next to the `NoSchedule` taint. Before, the label stayed.
+- `talos`: the KubePrism port is no longer set by the module. It is the Talos default, 7445, as before.
 - `talos`: everything the module does not set is what Talos generates for the 1.14 contract. Compared to a v1.13 contract that adds secure mount options on EPHEMERAL (`nosuid`, `nodev`), a weekly filesystem trim and workload isolation (`SecurityProfileConfig`).
 
 ### Removed

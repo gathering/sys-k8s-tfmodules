@@ -178,8 +178,34 @@ run "scheduling_on_control_planes" {
   }
 
   assert {
-    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : can(yamldecode(d).taints) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNodeConfig\n")] == [false]
-    error_message = "With scheduling allowed a control plane must have no taint."
+    condition     = [for d in [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeNodeConfig\n")] : { labels = d.labels, taints = try(d.taints, {}) }] == [{ labels = { "node-role.kubernetes.io/control-plane" = "" }, taints = {} }]
+    error_message = "With scheduling allowed a control plane must have no taint and must not be kept out of load balancers."
+  }
+}
+
+run "extra_cert_sans" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    extra_cert_sans            = ["api.test.example.org"]
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1", "api.test.example.org"] && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAPIServerConfig\n")][0].certExtraSANs == ["localhost", "2001:db8::1", "api.test.example.org"]
+    error_message = "extra_cert_sans must be in the certificates of the Talos API and the Kubernetes API."
   }
 }
 
@@ -333,6 +359,32 @@ run "oidc_without_groups_claim" {
   assert {
     condition     = keys([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration.jwt[0].claimMappings) == ["username"]
     error_message = "Without a groups claim there must be no groups mapping."
+  }
+}
+
+run "oidc_without_cluster_admin_binding" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", cluster_admin_binding = false }
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeInlineManifestConfig\n")][*].name == ["extra"] && length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeAuthenticationConfig\n")][0].configuration.jwt) == 1
+    error_message = "With cluster_admin_binding off, OIDC must stay on and only the binding must go."
   }
 }
 

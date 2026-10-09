@@ -1,13 +1,9 @@
 locals {
   kube_apiserver_port = 6443
-  kubeprism_port      = 7445
 
   cluster_endpoint = "https://[${var.cluster_ip}]:${local.kube_apiserver_port}"
 
-  cert_sans = [
-    "localhost",
-    var.cluster_ip
-  ]
+  cert_sans = concat(["localhost", var.cluster_ip], var.extra_cert_sans)
 
   oidc_enabled = var.oidc != null
 
@@ -21,7 +17,7 @@ locals {
 
   # The group is quoted only when YAML needs it. Quoting the default too would change the
   # rendered config and re-apply it on every control plane
-  oidc_inline_manifests = local.oidc_enabled ? [
+  oidc_inline_manifests = local.oidc_enabled && try(var.oidc.cluster_admin_binding, false) ? [
     {
       name     = "oidc-${var.cluster_name}-cluster-admin"
       contents = <<-EOT
@@ -50,16 +46,18 @@ EOT
     yamlencode({ machine = { certSANs = local.cert_sans } }),
     yamlencode({ apiVersion = "v1alpha1", kind = "ResolverConfig", nameservers = [for address in var.nameservers : { address = address }] }),
     yamlencode({ apiVersion = "v1alpha1", kind = "TimeSyncConfig", ntp = { servers = var.time_servers } }),
-    yamlencode({ apiVersion = "v1alpha1", kind = "KubePrismConfig", port = local.kubeprism_port }),
     yamlencode({ apiVersion = "v1alpha1", kind = "KubeNetworkConfig", podSubnets = var.pod_subnets, serviceSubnets = var.service_subnets }),
     var.discovery_enabled
     ? yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", endpoint = var.discovery_service_endpoint })
     : yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", "$patch" = "delete" }),
   ]
 
-  # Talos generates the node document of a control plane with the NoSchedule taint
+  # Talos generates the node document of a control plane with the NoSchedule taint and a
+  # label that keeps the node out of load balancers. A patch cannot take one label out,
+  # so the document is replaced
   scheduling_config_patches = var.allow_scheduling_on_control_planes ? [
-    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNodeConfig", taints = { "$patch" = "delete" } }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNodeConfig", "$patch" = "delete" }),
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNodeConfig", labels = { "node-role.kubernetes.io/control-plane" = "" } }),
   ] : []
 
   # The patch replaces `configuration` as a whole, so `anonymous` repeats what Talos
