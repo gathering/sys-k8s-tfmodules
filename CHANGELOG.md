@@ -4,7 +4,7 @@ All notable changes to these modules are listed here. Versions are git tags; pin
 
 ## v0.1.0 - unreleased
 
-The first release meant to be pinned. It changes the interface of all five modules compared to `main` before it, which consumers tracked unpinned: every module call has to be edited, and after those edits a plan shows a fixed set of changes on every existing cluster. [UPGRADING.md](./UPGRADING.md) lists every edit, the expected plan and the rollout procedure. Anything else in the plan is a bug or a missed edit: do not apply it, report it.
+The first release meant to be pinned. It changes the interface of all five modules compared to `main` before it, which consumers tracked unpinned, and it tracks nodes by key instead of by position. There is no in-place upgrade from the modules before it: clusters are redeployed, see [UPGRADING.md](./UPGRADING.md).
 
 The minimum OpenTofu version is 1.8. It cannot deprecate variables, so a renamed or removed input is an error until the call is edited, not a warning.
 
@@ -12,7 +12,7 @@ The minimum OpenTofu version is 1.8. It cannot deprecate variables, so a renamed
 
 All modules:
 
-- `required_version = ">= 1.8"` and provider version constraints: `bpg/proxmox ~> 0.116.0`, `e-breuninger/netbox ~> 5.8`, `siderolabs/talos ~> 0.12.0`, `fortinetdev/fortios ~> 1.26`, `hashicorp/random ~> 3.9`. `talos` declares `hashicorp/random`, which it already used.
+- `required_version = ">= 1.8"` and provider version constraints: `bpg/proxmox ~> 0.116.0`, `e-breuninger/netbox ~> 5.8`, `siderolabs/talos ~> 0.12.0`, `fortinetdev/fortios ~> 1.26`.
 - `tofu test` tests in every module. Netbox, Proxmox and FortiGate are mocked, so they need no credentials.
 - CI on pull requests and pushes to `main` (fmt, validate, test, tflint, terraform-docs check) with matching pre-commit hooks.
 - [`examples/full-cluster`](./examples/full-cluster), a root module that wires all five modules and is validated in CI.
@@ -20,10 +20,9 @@ All modules:
 
 `talos`:
 
-- `node_keys` and the `nodes_by_key` output. A pool with `node_keys` names each node `<node_prefix><key>` and tracks it by that key, so any node can be removed without touching the others. Without it a pool works as before, with random names, tracked by position and with the same resource addresses.
+- `node_keys`, required, and the `nodes_by_key` output. Each node is named `<node_prefix><key>` and tracked by that key, so any node can be removed without touching the others. It replaces `nodes` and the random node names, see "Removed".
 - `apply_mode`, passed to every config apply. See "Changed" for the default.
 - `on_destroy`, default `{ graceful = true, reset = false, reboot = false }`: a removed node's VM is deleted without telling Talos, as before. `on_destroy = { reset = true }` resets a node before it is removed, so that a removed control plane leaves etcd instead of staying behind as a dead member.
-- `snippet_per_pool` names the machine config snippet per pool, so that pools of the same type in one cluster stop overwriting each other's file. Off by default; see the README before turning it on for an existing pool.
 - `proxmox_nodes` pins the hosts that get the snippet and the placement order. `proxmox_online_only` skips offline hosts when placing new VMs.
 - `netbox_node_prefix_lookup` looks up the prefix id from `netbox_node_prefix`; `netbox_node_prefix_id` is optional when it is set.
 - `gateway` overrides the default of host 1 of the node prefix.
@@ -31,47 +30,50 @@ All modules:
 
 `fg-k8slb`:
 
-- `realservers_by_key` takes the realservers with explicit ids, so that a membership change does not renumber the others.
+- `realservers_by_key`, required and not empty, takes the realservers with explicit ids, so that a membership change does not renumber the others. It replaces `realservers`, see "Removed".
 - `ssl_ssh_profile`, default `SSL-Monitor` as hardcoded before.
 - Outputs `vip_names` and `policy_id`.
 
 `fg-policy`:
 
 - `ssl_ssh_profile` and `nat64_pool`, with the previously hardcoded values as defaults.
-- `comments`, `nat` and a null `nat64`, to leave those arguments unset on the policy. The defaults give the policy the module created before.
+- `comments` overrides the default comment. `nat` sets source NAT; null, the default, leaves it unset on the policy.
 - Output `policy_id`.
 
 `fg-bgp-neighbors`:
 
-- `neighbors_by_key` tracks neighbors by key. It can be combined with `neighbors`.
+- `neighbors_by_key`, required, tracks neighbors by key. It replaces `neighbors`, see "Removed".
 - Optional `le` and `id` on `prefixes` entries; `ge` is optional. `id` sets the prefix-list rule id, so that an entry can be removed or inserted without renumbering the others.
 - `prefix_list_name` renames the prefix lists for a second instance of the module in one cluster.
-- Outputs `neighbor_ips`, `neighbor_ips_by_key`, `prefix_list_in_name` and `prefix_list_out_name`.
+- Outputs `neighbor_ips_by_key`, `prefix_list_in_name` and `prefix_list_out_name`.
 
 ### Changed
+
+All modules:
+
+- Every variable is `nullable = false` unless its default is null: passing `null` gives the default instead of overriding it with null, and `null` for a required input is rejected.
 
 `talos`:
 
 - `pod_subnets` and `service_subnets` are required and must be non-empty lists of CIDR prefixes. The old default `[]` made Talos render a cluster without pod and service networks.
 - Input `netbox_cluster` is now `netbox_cluster_name`; input `netbox_device_role` is now `netbox_device_role_name`; output `name` is now `cluster_name`.
+- The machine config snippet is named `<cluster_name>-<type>-<node_prefix>.yaml` instead of `<cluster_name>-<type>.yaml`, so that pools of the same type in one cluster no longer overwrite each other's file. `node_prefix` must not be empty and is used as given: `wa-` and `wa` are different pools.
+- A pool without nodes uploads no snippet: the machine config holds the cluster secrets.
 - Config changes are applied with `apply_mode = "staged_if_needing_reboot"` by default instead of the provider default `auto`. On nodes running Talos before 1.14, a config change that needs a reboot is staged instead of rebooting every node of the pool at once. Talos 1.14 and later do not reboot on a config apply.
 - Workers get a machine config without the settings only control planes act on: `apiServer` (with the OIDC arguments), `allowSchedulingOnControlPlanes`, `inlineManifests`, `proxy` and `network.cni`.
-- Control planes get one config patch instead of two. The `controlplane_config_patches` output has one element; `worker_config_patches` loses the control-plane settings.
+- Control planes get one config patch instead of two. The outputs `controlplane_config_patches` and `worker_config_patches` are replaced by `config_patches`, the one patch of the pool's own type.
 - The OIDC `ClusterRoleBinding` is only rendered with OIDC on.
-- OIDC is off when `oidc_issuer_url` is `null` as well as when it is `""`. `oidc_issuer_url` and `oidc_client_id` default to `null`. Every `oidc_*` input accepts `null` and `""` for unset, and an unset input is left out of the API server arguments.
-- `oidc_issuer_url` without `oidc_client_id` is rejected at plan time. kube-apiserver refuses to start with only one of the two.
-- `talos_machine_secrets`, `talos_client_configuration`, `pod_subnets`, `service_subnets` and `talos_inline_manifests` have types. `talos_machine_secrets` is marked sensitive. `talos_inline_manifests` is a list of objects with `name` and `contents`; any other attribute on an entry is dropped.
-- Input validation: `type` must be `controlplane` or `worker`, `nodes` a whole number of 0 or more, `cluster_name` not empty, `node_prefix` made of letters, digits, hyphens and dots. A control-plane pool must have at least one node.
-- The `nodes` output is built from the Netbox records instead of the Proxmox VM state. Same values; it no longer waits for the VMs to be created.
-- VM placement wraps around when a pool has more nodes than there are Proxmox hosts instead of failing. Existing VMs do not move.
+- The six `oidc_*` inputs are one optional object, `oidc`, with `issuer_url` and `client_id` required and the claims and prefixes optional. OIDC is off when it is null, the default. A claim or prefix set to `""` is left out of the API server arguments; `null` gives its default.
+- `talos_machine_secrets`, `talos_client_configuration`, `pod_subnets`, `service_subnets` and `talos_inline_manifests` have types. `talos_machine_secrets` is marked sensitive. `talos_inline_manifests` is a list of objects with `name` and `contents`, both required; any other attribute on an entry is dropped.
+- Input validation: `type` must be `controlplane` or `worker`, `cluster_name` not empty, `node_prefix` not empty and made of letters, digits, hyphens and dots. A control-plane pool must have at least one node.
+- VM placement wraps around when a pool has more nodes than there are Proxmox hosts instead of failing.
 - Every config apply is ordered after all VMs of the pool and the bootstrap explicitly.
 - Node addresses are derived by splitting off the prefix length instead of trimming a literal `/64`. Same result for `/64` prefixes.
 
 `fg-k8slb`:
 
 - Input `name` is now `cluster_name`. Input `dstintf` is a list of strings.
-- `realservers` is optional; exactly one of `realservers` and `realservers_by_key` must be set.
-- The three VIPs are one resource with `for_each`, and the policy is created through the `fg-policy` module instead of a resource of its own. `moved` blocks carry the state over; VIPs and policy are unchanged.
+- The three VIPs are one resource with `for_each`, and the policy is created through the `fg-policy` module instead of a resource of its own. The policy now gets that module's default comment and `nat64` and `ippool` set to `disable`.
 
 `fg-policy`:
 
@@ -81,7 +83,6 @@ All modules:
 
 - `prefixes` is required and must not be empty: an inbound prefix list without rules rejects every route from the cluster.
 - `remote_as` is a string, default `"64513"`. A number in a module call is still accepted and gives the same value.
-- `neighbors` is optional and defaults to `[]`.
 
 `fg-vlan`:
 
@@ -96,27 +97,25 @@ All modules:
 
 ### Removed
 
+- `talos`: `nodes`, the random node names and the `hashicorp/random` provider. Nodes are no longer tracked by position; `node_keys` is the only way to size a pool.
+- `talos`: the list outputs `nodes` and `nodes_ip`. Use `nodes_by_key`, for example `values(module.<pool>.nodes_by_key)[*].ip`.
+- `fg-bgp-neighbors`: the list input `neighbors`. Use `neighbors_by_key`.
+- `fg-k8slb`: the list input `realservers`. Use `realservers_by_key`.
 - `fg-vlan`: the unused inputs `infra_zone` and `bastion_address_group`.
 - `fg-bgp-neighbors`, `fg-k8slb` and `fg-policy`: the unused `netbox` provider requirement.
 - `talos`: commented-out `local_file` resources.
 
 ### Fixed
 
-- `talos`: the OIDC `ClusterRoleBinding` names the group with `oidc_groups_prefix` in front instead of a fixed `oidc:`, so it matches the group kube-apiserver sees when the prefix is not the default.
-- `talos`: with OIDC on, an `oidc_*` input set to `""` or `null` was rendered as an API server argument with a null value.
+- `talos`: the OIDC `ClusterRoleBinding` names the group with the OIDC groups prefix in front instead of a fixed `oidc:`, so it matches the group kube-apiserver sees when the prefix is not the default.
+- `talos`: with OIDC on, a claim or prefix set to `""` was rendered as an API server argument with a null value.
 - `fg-bgp-neighbors`: an `le` key on a `prefixes` entry was dropped. It is applied now.
 
 ### Upgrade notes
 
-The guide is [UPGRADING.md](./UPGRADING.md). In short, for a deployment that tracks `main` from before this release:
+There is no in-place upgrade from `main` before this release; redeploy, see [UPGRADING.md](./UPGRADING.md).
 
-- Every module call needs edits: renamed inputs and outputs in `fg-vlan`, `talos` and `fg-k8slb`, strings that became lists in `fg-k8slb` and `fg-policy`, and inputs that became required in `talos` and `fg-bgp-neighbors`.
-- After the edits and with nothing new turned on, the plan updates every `talos_machine_configuration_apply` in place, replaces the snippet files of every pool whose rendered config changes (all worker pools, and control-plane pools with OIDC off or with non-default OIDC prefixes or claims), and moves the three VIPs and the policy of every `fg-k8slb` instance without changing them. No Netbox resource, `random_id`, VM, bootstrap or kubeconfig changes.
-- The apply contacts every node on tcp/50000. Do it in a maintenance window, test cluster first, control planes first.
-- The `moved` blocks in `fg-k8slb` exist for this upgrade and may be removed in a later release, once consumers have applied v0.1.0.
-- `talos_client_configuration` is deliberately not marked sensitive: doing so plans an in-place update of every Talos resource on existing clusters.
-
-None of this was run against real Netbox, Proxmox, Talos or FortiGate. UPGRADING.md says how the expected plan was produced.
+Not run against real Netbox, Proxmox, Talos or FortiGate in this form: the tests mock them. What `apply_mode` does on running nodes, removing the first control-plane key and reset on destroy are read from the provider source and not tested; the READMEs mark them.
 
 ## v0.0.1
 

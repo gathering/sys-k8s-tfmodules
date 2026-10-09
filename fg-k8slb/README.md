@@ -2,7 +2,7 @@
 
 Creates three FortiGate IPv6 VIPs (server-load-balance) for the Kubernetes API (6443), Talos control API (50001), and talosctl API (50000), plus a single firewall policy accepting traffic to all three.
 
-The policy is created by the [`fg-policy`](../fg-policy) module, called with a relative source. That resolves when this module is used from a git source too, because OpenTofu fetches the whole repository and then enters the `fg-k8slb` directory. The policy allows service `ALL`: the VIPs only listen on their own port.
+The policy is created by the [`fg-policy`](../fg-policy) module, called with a relative source. That resolves when this module is used from a git source too, because OpenTofu fetches the whole repository and then enters the `fg-k8slb` directory. The policy allows service `ALL`: the VIPs only listen on their own port. Source NAT is off.
 
 ## Prerequisites
 
@@ -33,25 +33,19 @@ module "k8s_lb" {
 
 ## Realservers
 
-Set one of the two:
+`realservers_by_key` is a map of nodes with an explicit realserver `id` each. Removing or adding a node leaves id and address of the others as they are. Never give the id of a node to another one while the first still exists. With a `talos` pool:
 
-- `realservers_by_key`: a map of nodes with an explicit realserver `id` each. Removing or adding a node leaves id and address of the others as they are. Never give the id of a node to another one while the first still exists. With a `talos` pool that has `node_keys`:
+```hcl
+locals {
+  controlplanes = { a = 1, b = 2, c = 3 } # node key => realserver id
+}
 
-  ```hcl
-  locals {
-    controlplanes = { a = 1, b = 2, c = 3 } # node key => realserver id
-  }
+realservers_by_key = {
+  for key, id in local.controlplanes : key => { id = id, ip = module.controlplane.nodes_by_key[key].ip }
+}
+```
 
-  realservers_by_key = {
-    for key, id in local.controlplanes : key => { id = id, ip = module.controlplane.nodes_by_key[key].ip }
-  }
-  ```
-
-- `realservers`: a list of addresses. A realserver's id is its position in the sorted list, so a change of membership renumbers every realserver that sorts after it. `realservers = module.controlplane.nodes_ip`.
-
-Either way a membership change is an in-place update of the three VIPs. The realservers are a list inside the VIP, so the plan shows the change by position: after removing the realserver with id 2 of three it reads `id = 2 -> 3` on the second entry and removes the third. The entries left are the same ids with the same addresses.
-
-To switch an existing load balancer from the list to the map without a change, give every node the id it has now, see the [`talos` README](../talos/README.md#moving-an-existing-pool-to-node-keys).
+A membership change is an in-place update of the three VIPs. The realservers are a list inside the VIP, so the plan shows the change by position: after removing the realserver with id 2 of three it reads `id = 2 -> 3` on the second entry and removes the third. The entries left are the same ids with the same addresses.
 
 ## Tests
 
@@ -91,8 +85,7 @@ To switch an existing load balancer from the list to the map without a change, g
 | <a name="input_dstintf"></a> [dstintf](#input\_dstintf) | Dst interfaces for policy | `list(string)` | n/a | yes |
 | <a name="input_extip"></a> [extip](#input\_extip) | External IPv6 address | `string` | n/a | yes |
 | <a name="input_monitor"></a> [monitor](#input\_monitor) | Health monitor name for VIP realservers | `string` | `"tcp-check"` | no |
-| <a name="input_realservers"></a> [realservers](#input\_realservers) | Control-plane node addresses (IPv6). Each gets its position in the sorted list as realserver id, so a change of membership renumbers the ones after it. Set this or `realservers_by_key` | `list(string)` | `null` | no |
-| <a name="input_realservers_by_key"></a> [realservers\_by\_key](#input\_realservers\_by\_key) | Control-plane nodes by a key known at plan time, each with an explicit realserver `id` and its address (IPv6). Adding or removing a node leaves the others untouched. Set this or `realservers` | <pre>map(object({<br/>    id = number<br/>    ip = string<br/>  }))</pre> | `null` | no |
+| <a name="input_realservers_by_key"></a> [realservers\_by\_key](#input\_realservers\_by\_key) | Control-plane nodes by a key known at plan time, each with an explicit realserver `id` and its address (IPv6). At least one. Adding or removing a node leaves the others untouched | <pre>map(object({<br/>    id = number<br/>    ip = string<br/>  }))</pre> | n/a | yes |
 | <a name="input_srcaddr6"></a> [srcaddr6](#input\_srcaddr6) | Src addresses for policy. Must exist as a address or group | `list(string)` | n/a | yes |
 | <a name="input_srcintf"></a> [srcintf](#input\_srcintf) | Src interfaces for policy | `list(string)` | n/a | yes |
 | <a name="input_ssl_ssh_profile"></a> [ssl\_ssh\_profile](#input\_ssl\_ssh\_profile) | SSL/SSH inspection profile for the policy | `string` | `"SSL-Monitor"` | no |

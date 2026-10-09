@@ -3,21 +3,6 @@ locals {
 }
 
 resource "fortios_routerbgp_neighbor" "this" {
-  count = length(var.neighbors)
-
-  ip                           = var.neighbors[count.index].ip
-  remote_as                    = var.remote_as
-  activate                     = "disable"
-  activate6                    = "enable"
-  soft_reconfiguration6        = "enable"
-  capability_graceful_restart6 = "enable"
-  description                  = "Cluster: ${var.cluster_name} Node: ${var.neighbors[count.index].name}"
-  prefix_list_in6              = fortios_router_prefixlist6.in.name
-  prefix_list_out6             = fortios_router_prefixlist6.out.name
-}
-
-# Same as above for neighbors_by_key. Keep the two in sync
-resource "fortios_routerbgp_neighbor" "keyed" {
   for_each = var.neighbors_by_key
 
   ip                           = each.value.ip

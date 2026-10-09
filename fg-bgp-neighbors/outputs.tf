@@ -1,11 +1,6 @@
-output "neighbor_ips" {
-  description = "Addresses of the BGP neighbors from `neighbors`, in the order of that list"
-  value       = fortios_routerbgp_neighbor.this[*].ip
-}
-
 output "neighbor_ips_by_key" {
-  description = "Addresses of the BGP neighbors from `neighbors_by_key`, by key"
-  value       = { for k, n in fortios_routerbgp_neighbor.keyed : k => n.ip }
+  description = "Addresses of the BGP neighbors, by the keys of `neighbors_by_key`"
+  value       = { for k, n in fortios_routerbgp_neighbor.this : k => n.ip }
 }
 
 output "prefix_list_in_name" {

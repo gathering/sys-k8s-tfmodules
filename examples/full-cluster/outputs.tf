@@ -12,5 +12,5 @@ output "talosconfig" {
 
 output "nodes" {
   description = "All nodes as objects with `name` and `ip`"
-  value       = concat(module.controlplane.nodes, module.workers.nodes)
+  value       = concat(values(module.controlplane.nodes_by_key), values(module.workers.nodes_by_key))
 }

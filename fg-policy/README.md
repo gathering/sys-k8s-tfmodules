@@ -27,13 +27,9 @@ module "policy" {
 }
 ```
 
-## Unset arguments
+## Source NAT
 
-The FortiGate provider treats an argument that is not set differently from one set to `disable`: it leaves the value on the device alone. Three inputs can therefore be null or empty, which matters when a policy that was created elsewhere is moved into this module and must not change:
-
-- `nat64 = null` sets neither `nat64` nor `ippool`. The default `false` sets both to `disable`.
-- `nat = null`, the default, does not set `nat`. `false` sets it to `disable`, `true` to `enable`.
-- `comments = ""` sets no comment. The default `null` gives `<name> - Created by Terraform Provider for FortiOS`.
+The FortiGate provider treats an argument that is not set differently from one set to `disable`: it leaves the value on the device alone. `nat = null`, the default, does not set `nat`. `false` sets it to `disable`, `true` to `enable`.
 
 ## Tests
 
@@ -67,12 +63,12 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_comments"></a> [comments](#input\_comments) | Policy comment. Null gives `<name> - Created by Terraform Provider for FortiOS`. An empty string leaves the comment unset: nothing is sent, so a comment that exists on the device is not cleared | `string` | `null` | no |
+| <a name="input_comments"></a> [comments](#input\_comments) | Policy comment. Defaults to `<name> - Created by Terraform Provider for FortiOS` | `string` | `null` | no |
 | <a name="input_dstaddr6"></a> [dstaddr6](#input\_dstaddr6) | Destination IPv6 addresses | `list(string)` | n/a | yes |
 | <a name="input_dstintf"></a> [dstintf](#input\_dstintf) | Destination interfaces | `list(string)` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name of policy | `string` | n/a | yes |
 | <a name="input_nat"></a> [nat](#input\_nat) | Source NAT (`nat`) on the policy. Null leaves it unset | `bool` | `null` | no |
-| <a name="input_nat64"></a> [nat64](#input\_nat64) | Enable NAT64. Null leaves `nat64` and `ippool` unset on the policy instead of setting them to `disable` | `bool` | `false` | no |
+| <a name="input_nat64"></a> [nat64](#input\_nat64) | Enable NAT64 | `bool` | `false` | no |
 | <a name="input_nat64_pool"></a> [nat64\_pool](#input\_nat64\_pool) | IP pool used when `nat64` is true | `string` | `"NAT64-POOL"` | no |
 | <a name="input_services"></a> [services](#input\_services) | Services | `list(string)` | n/a | yes |
 | <a name="input_srcaddr6"></a> [srcaddr6](#input\_srcaddr6) | Source IPv6 addresses | `list(string)` | n/a | yes |

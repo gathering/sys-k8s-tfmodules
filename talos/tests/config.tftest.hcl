@@ -60,7 +60,7 @@ mock_provider "proxmox" {
 variables {
   cluster_name          = "test"
   node_prefix           = "n-"
-  nodes                 = 1
+  node_keys             = ["a"]
   cluster_ip            = "2001:db8::1"
   talos_version         = "v1.11.0"
   kubernetes_version    = "1.34.0"
@@ -106,7 +106,7 @@ run "controlplane_without_oidc" {
   }
 
   assert {
-    condition     = length(local.controlplane_config_patches) == 1 && data.talos_machine_configuration.this.config_patches == tolist(local.controlplane_config_patches)
+    condition     = length(output.config_patches) == 1 && data.talos_machine_configuration.this.config_patches == tolist(local.controlplane_config_patches)
     error_message = "Control planes must get the single control-plane patch."
   }
 
@@ -135,7 +135,7 @@ run "controlplane_without_oidc" {
   }
 }
 
-run "empty_strings_equal_null" {
+run "null_oidc_attributes_give_the_defaults" {
   override_resource {
     target = talos_machine_bootstrap.this
   }
@@ -152,13 +152,26 @@ run "empty_strings_equal_null" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "controlplane"
-    oidc_issuer_url            = ""
-    oidc_client_id             = ""
+    oidc = {
+      issuer_url      = "https://sso.example.org/realms/test"
+      client_id       = "kubernetes"
+      username_claim  = null
+      username_prefix = null
+      groups_claim    = null
+      groups_prefix   = null
+    }
   }
 
   assert {
-    condition     = length(try(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs, {})) == 0
-    error_message = "Empty OIDC strings must turn OIDC off, like null."
+    condition = yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.apiServer.extraArgs == {
+      oidc-client-id       = "kubernetes"
+      oidc-groups-claim    = "groups"
+      oidc-groups-prefix   = "oidc:"
+      oidc-issuer-url      = "https://sso.example.org/realms/test"
+      oidc-username-claim  = "preferred_username"
+      oidc-username-prefix = "oidc:"
+    }
+    error_message = "A null claim or prefix must give its default, not leave the argument out."
   }
 }
 
@@ -179,9 +192,7 @@ run "controlplane_with_oidc" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "controlplane"
-    oidc_issuer_url            = "https://sso.example.org/realms/test"
-    oidc_client_id             = "kubernetes"
-    oidc_username_prefix       = ""
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", username_prefix = "" }
   }
 
   assert {
@@ -229,14 +240,12 @@ run "oidc_groups_prefix_names_the_group" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "controlplane"
-    oidc_issuer_url            = "https://sso.example.org/realms/test"
-    oidc_client_id             = "kubernetes"
-    oidc_groups_prefix         = "* #"
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", groups_prefix = "* #" }
   }
 
   assert {
     condition     = yamldecode(yamldecode(data.talos_machine_configuration.this.machine_configuration).cluster.inlineManifests[0].contents).subjects[0].name == "* #test-cluster-admin"
-    error_message = "The binding must use oidc_groups_prefix, also when it needs quoting in YAML."
+    error_message = "The binding must use groups_prefix, also when it needs quoting in YAML."
   }
 }
 
@@ -257,9 +266,7 @@ run "oidc_without_groups_prefix" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "controlplane"
-    oidc_issuer_url            = "https://sso.example.org/realms/test"
-    oidc_client_id             = "kubernetes"
-    oidc_groups_prefix         = null
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", groups_prefix = "" }
   }
 
   assert {
@@ -285,10 +292,9 @@ run "worker" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "worker"
-    nodes                      = 2
+    node_keys                  = ["a", "b"]
     pod_subnets                = ["2001:db8:42::/56"]
-    oidc_issuer_url            = "https://sso.example.org/realms/test"
-    oidc_client_id             = "kubernetes"
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes" }
   }
 
   assert {
@@ -297,7 +303,7 @@ run "worker" {
   }
 
   assert {
-    condition     = length(local.worker_config_patches) == 1 && data.talos_machine_configuration.this.config_patches == tolist(local.worker_config_patches)
+    condition     = length(output.config_patches) == 1 && data.talos_machine_configuration.this.config_patches == tolist(local.worker_config_patches)
     error_message = "Workers must get the single worker patch."
   }
 
@@ -309,7 +315,7 @@ run "worker" {
   }
 
   assert {
-    condition     = !strcontains(local.worker_config_patches[0], "oidc") && !strcontains(local.worker_config_patches[0], "extra")
+    condition     = !strcontains(output.config_patches[0], "oidc") && !strcontains(output.config_patches[0], "extra")
     error_message = "OIDC settings and talos_inline_manifests must only reach control planes."
   }
 
@@ -333,7 +339,7 @@ run "worker" {
   }
 }
 
-run "issuer_without_client_id_is_rejected" {
+run "oidc_needs_issuer_and_client_id" {
   command = plan
 
   override_resource {
@@ -352,10 +358,10 @@ run "issuer_without_client_id_is_rejected" {
     talos_machine_secrets      = run.setup.machine_secrets
     talos_client_configuration = run.setup.client_configuration
     type                       = "controlplane"
-    oidc_issuer_url            = "https://sso.example.org/realms/test"
+    oidc                       = { issuer_url = "https://sso.example.org/realms/test", client_id = "" }
   }
 
   expect_failures = [
-    data.talos_machine_configuration.this,
+    var.oidc,
   ]
 }

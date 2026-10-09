@@ -89,14 +89,12 @@ module "bgp_neighbors" {
 
 ### Stable keys
 
-Node names and node addresses do not exist before the first apply, so nothing can be tracked by them: OpenTofu needs the keys of a `for_each` while planning. The keys therefore come from the caller. `talos` takes `node_keys`, names each node `<node_prefix><key>` and returns `nodes_by_key`; `fg-bgp-neighbors` takes `neighbors_by_key` and `fg-k8slb` takes `realservers_by_key` with an explicit realserver id per node. Any node can then be removed, and only that node's VM, Netbox records, BGP neighbor and realserver go.
-
-A pool without `node_keys` is tracked by position (`nodes`, and the list inputs `neighbors` and `realservers`). Every pool created before v0.1.0 is such a pool and keeps working unchanged. Moving such a pool to keys is optional and described in the [`talos` README](./talos/README.md#moving-an-existing-pool-to-node-keys).
+Node addresses do not exist before the first apply, so nothing can be tracked by them: OpenTofu needs the keys of a `for_each` while planning. The keys therefore come from the caller. Node names are built from them and are known while planning too, which is why `fg-bgp-neighbors` can be keyed by node name. `talos` takes `node_keys`, names each node `<node_prefix><key>` and returns `nodes_by_key`; `fg-bgp-neighbors` takes `neighbors_by_key` and `fg-k8slb` takes `realservers_by_key` with an explicit realserver id per node. Any node can then be removed, and only that node's VM, Netbox records, BGP neighbor and realserver go.
 
 ## Conventions
 
 - Every module has `main.tf`, `variables.tf`, `versions.tf` and, when it has outputs, `outputs.tf`. `talos` splits its resources into one file per provider (`netbox.tf`, `proxmox.tf`, `talos.tf`).
-- A module's single resource of a type is named `this`. Where a resource exists both by position and by key, the second is named `keyed`.
+- A module's resource of a type is named `this`, also when it has one instance per node.
 - Every variable has a type and a description. Validations only reject values that could never have applied, or that are known to break a cluster (empty `pod_subnets`, `service_subnets`, `prefixes`).
 - `cluster_name` is the cluster, in every module that needs it. `name` is the name of the one thing a module creates (the VLAN in `fg-vlan`, the policy in `fg-policy`).
 - Inputs that are lists on the FortiGate are lists here and keep the FortiGate name: `srcintf`, `dstintf`, `srcaddr6`, `dstaddr6`, in both `fg-policy` and `fg-k8slb`.
@@ -118,7 +116,7 @@ A pool without `node_keys` is tracked by position (`nodes`, and the list inputs 
 Releases are git tags (`vMAJOR.MINOR.PATCH`) and are listed in [CHANGELOG.md](./CHANGELOG.md). Always pin the module source with `?ref=<tag>`; `main` can change at any time.
 
 - Each changelog entry says whether a plan is expected to show changes for unchanged inputs, and which. Anything else in the plan is a bug: stop and report it.
-- `v0.1.0` is the first release. Moving a deployment that tracks `main` from before it to `v0.1.0` requires editing every module call and plans changes; [UPGRADING.md](./UPGRADING.md) is the guide.
+- `v0.1.0` is the first release. There is no upgrade path to it from `main` before it: clusters are redeployed, see [UPGRADING.md](./UPGRADING.md).
 - A later release that requires editing module calls, or that moves or replaces resources, says so in its changelog entry and gets a section in UPGRADING.md.
 - The minimum OpenTofu version is 1.8, which has no way to deprecate a variable. A renamed or removed input is therefore an error until the module call is edited, not a warning.
 - Run a plan against real infrastructure before moving a cluster to a new tag. The modules cannot be planned in CI.
@@ -140,7 +138,6 @@ Releases are git tags (`vMAJOR.MINOR.PATCH`) and are listed in [CHANGELOG.md](./
 | FortiOS | `fortinetdev/fortios` |
 | Netbox | `e-breuninger/netbox` |
 | Proxmox | `bpg/proxmox` |
-| Random | `hashicorp/random` |
 | Talos | `siderolabs/talos` |
 
 ## Updating documentation

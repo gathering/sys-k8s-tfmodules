@@ -1,5 +1,5 @@
-# One cluster built from all five modules. The nodes are tracked by key (node_keys), which is
-# the mode to use for a new cluster: any node can be removed without touching the others.
+# One cluster built from all five modules. The nodes are tracked by key (node_keys): any node
+# can be removed without touching the others.
 #
 # The module sources are relative so that CI validates this example against the modules of
 # the same commit. In your own root module, pin a release instead:
@@ -38,7 +38,6 @@ module "controlplane" {
   pod_subnets                = var.pod_subnets
   service_subnets            = var.service_subnets
   proxmox_nodes              = var.proxmox_nodes
-  snippet_per_pool           = true
 
   # The prefix is created in this configuration, so pass its id. netbox_node_prefix_lookup
   # is for a prefix that already exists
@@ -67,7 +66,6 @@ module "workers" {
   pod_subnets                = var.pod_subnets
   service_subnets            = var.service_subnets
   proxmox_nodes              = var.proxmox_nodes
-  snippet_per_pool           = true
 
   netbox_node_prefix    = module.vlan.prefix
   netbox_node_prefix_id = module.vlan.prefix_id

@@ -28,7 +28,7 @@ run "defaults" {
       fortios_firewall_policy.this.nat64 == "disable",
       fortios_firewall_policy.this.ippool == "disable",
     ])
-    error_message = "A default no longer gives the policy the module created before v0.1.0."
+    error_message = "A default no longer gives the expected policy."
   }
 
   assert {
@@ -65,8 +65,7 @@ run "nat64" {
   }
 }
 
-# The arguments fg-k8slb passes. A difference here is an in-place update of every cluster's
-# API policy.
+# The arguments fg-k8slb passes
 run "as_called_by_fg_k8slb" {
   command = plan
 
@@ -77,19 +76,31 @@ run "as_called_by_fg_k8slb" {
     dstintf  = ["vlan100"]
     dstaddr6 = ["test-k8s-api", "test-talos-control-api", "test-talosctl-api"]
     services = ["ALL"]
-    comments = ""
     nat      = false
-    nat64    = null
   }
 
   assert {
-    condition     = fortios_firewall_policy.this.comments == null && fortios_firewall_policy.this.nat == "disable"
-    error_message = "An empty comment must leave comments unset, and nat = false must set it to disable."
+    condition     = fortios_firewall_policy.this.nat == "disable" && fortios_firewall_policy.this.nat64 == "disable"
+    error_message = "nat = false must set nat to disable, and NAT64 must be off."
   }
 
   assert {
     condition     = toset(fortios_firewall_policy.this.srcintf[*].name) == toset(["wan1", "wan2"]) && toset(fortios_firewall_policy.this.dstaddr6[*].name) == toset(["test-k8s-api", "test-talos-control-api", "test-talosctl-api"])
     error_message = "Several interfaces and addresses must all reach the policy."
+  }
+}
+
+run "null_gives_the_default" {
+  command = plan
+
+  variables {
+    nat64           = null
+    ssl_ssh_profile = null
+  }
+
+  assert {
+    condition     = fortios_firewall_policy.this.nat64 == "disable" && fortios_firewall_policy.this.ssl_ssh_profile == "SSL-Monitor"
+    error_message = "A null input must give the module default."
   }
 }
 

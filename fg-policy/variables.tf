@@ -1,11 +1,13 @@
 variable "name" {
   description = "Name of policy"
   type        = string
+  nullable    = false
 }
 
 variable "srcintf" {
   description = "Source interfaces"
   type        = list(string)
+  nullable    = false
 
   validation {
     condition     = length(var.srcintf) > 0
@@ -16,11 +18,13 @@ variable "srcintf" {
 variable "srcaddr6" {
   description = "Source IPv6 addresses"
   type        = list(string)
+  nullable    = false
 }
 
 variable "dstintf" {
   description = "Destination interfaces"
   type        = list(string)
+  nullable    = false
 
   validation {
     condition     = length(var.dstintf) > 0
@@ -31,17 +35,20 @@ variable "dstintf" {
 variable "dstaddr6" {
   description = "Destination IPv6 addresses"
   type        = list(string)
+  nullable    = false
 }
 
 variable "services" {
   description = "Services"
   type        = list(string)
+  nullable    = false
 }
 
 variable "nat64" {
-  description = "Enable NAT64. Null leaves `nat64` and `ippool` unset on the policy instead of setting them to `disable`"
+  description = "Enable NAT64"
   type        = bool
   default     = false
+  nullable    = false
 }
 
 variable "nat" {
@@ -51,7 +58,7 @@ variable "nat" {
 }
 
 variable "comments" {
-  description = "Policy comment. Null gives `<name> - Created by Terraform Provider for FortiOS`. An empty string leaves the comment unset: nothing is sent, so a comment that exists on the device is not cleared"
+  description = "Policy comment. Defaults to `<name> - Created by Terraform Provider for FortiOS`"
   type        = string
   default     = null
 }
@@ -60,10 +67,12 @@ variable "nat64_pool" {
   description = "IP pool used when `nat64` is true"
   type        = string
   default     = "NAT64-POOL"
+  nullable    = false
 }
 
 variable "ssl_ssh_profile" {
   description = "SSL/SSH inspection profile"
   type        = string
   default     = "SSL-Monitor"
+  nullable    = false
 }

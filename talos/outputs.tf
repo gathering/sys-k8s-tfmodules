@@ -3,19 +3,9 @@ output "cluster_name" {
   value       = var.cluster_name
 }
 
-output "nodes" {
-  description = "List of all nodes as objects with `name` and `ip`. With `node_keys`, in the order of that list"
-  value       = [for i, name in local.node_names : { name = name, ip = local.node_ips[i] }]
-}
-
-output "nodes_ip" {
-  description = "List of IPv6 address to all nodes. With `node_keys`, in the order of that list"
-  value       = local.node_ips
-}
-
 output "nodes_by_key" {
-  description = "Nodes of a pool with `node_keys` as a map from key to an object with `name` and `ip`. The keys are known at plan time. Empty without `node_keys`"
-  value       = { for i, key in local.node_keys : key => { name = local.node_names[i], ip = local.node_ips[i] } }
+  description = "Nodes as a map from node key to an object with `name` and `ip`. The keys and names are known at plan time"
+  value       = { for i, key in var.node_keys : key => { name = "${var.node_prefix}${key}", ip = local.node_ips[i] } }
 }
 
 output "talosconfig" {
@@ -30,12 +20,7 @@ output "kubeconfig" {
   value       = local.bootstrap ? talos_cluster_kubeconfig.this[0].kubeconfig_raw : ""
 }
 
-output "controlplane_config_patches" {
-  description = "Config patches of a control plane: one patch with the settings for every node, the control-plane settings and the inline manifests"
-  value       = local.controlplane_config_patches
-}
-
-output "worker_config_patches" {
-  description = "Config patches of a worker: one patch with the settings for every node"
-  value       = local.worker_config_patches
+output "config_patches" {
+  description = "Config patches of the pool, one patch. For a worker the settings every node uses; for a control plane also the control-plane settings and the inline manifests"
+  value       = local.config_patches
 }

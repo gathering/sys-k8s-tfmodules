@@ -1,25 +1,15 @@
 variable "cluster_name" {
   description = "Cluster Name"
   type        = string
-}
-
-variable "neighbors" {
-  description = "Nodes as a list. Neighbors are tracked by position, so removing or reordering a node recreates the neighbors after it. Use `neighbors_by_key` where the keys can be known at plan time"
-  type = list(object({
-    name = string
-    ip   = string
-  }))
-  default  = []
-  nullable = false
+  nullable    = false
 }
 
 variable "neighbors_by_key" {
-  description = "Nodes as a map. The keys must be known at plan time, so node names from `random_id` or addresses cannot be keys. Adding or removing a node leaves the other neighbors untouched. Can be combined with `neighbors`"
+  description = "Nodes as a map. The keys must be known at plan time, so node names from `talos` pools can be keys and addresses cannot. Adding or removing a node leaves the other neighbors untouched"
   type = map(object({
     name = string
     ip   = string
   }))
-  default  = {}
   nullable = false
 }
 
@@ -31,6 +21,7 @@ variable "prefixes" {
     le     = optional(number)
     id     = optional(number)
   }))
+  nullable = false
 
   validation {
     condition     = length(var.prefixes) > 0
@@ -58,6 +49,7 @@ variable "remote_as" {
   description = "Remote AS Number"
   type        = string
   default     = "64513"
+  nullable    = false
 
   validation {
     condition     = can(regex("^[0-9]+(\\.[0-9]+)?$", var.remote_as))

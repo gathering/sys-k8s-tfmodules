@@ -9,19 +9,19 @@ locals {
     var.cluster_ip
   ]
 
-  # API server arguments. Unset inputs (null or "") are left out
-  cluster_oidc = {
-    for k, v in {
-      oidc-issuer-url      = var.oidc_issuer_url
-      oidc-client-id       = var.oidc_client_id
-      oidc-username-claim  = var.oidc_username_claim
-      oidc-username-prefix = var.oidc_username_prefix
-      oidc-groups-claim    = var.oidc_groups_claim
-      oidc-groups-prefix   = var.oidc_groups_prefix
-    } : k => v if v != null && v != ""
-  }
+  oidc_enabled = var.oidc != null
 
-  oidc_enabled = contains(keys(local.cluster_oidc), "oidc-issuer-url")
+  # API server arguments. A claim or prefix set to "" is left out
+  cluster_oidc = {
+    for k, v in local.oidc_enabled ? tomap({
+      oidc-issuer-url      = var.oidc.issuer_url
+      oidc-client-id       = var.oidc.client_id
+      oidc-username-claim  = var.oidc.username_claim
+      oidc-username-prefix = var.oidc.username_prefix
+      oidc-groups-claim    = var.oidc.groups_claim
+      oidc-groups-prefix   = var.oidc.groups_prefix
+    }) : tomap({}) : k => v if v != ""
+  }
 
   # The group as kube-apiserver sees it: the groups claim value with the groups prefix in front
   oidc_admin_group = "${lookup(local.cluster_oidc, "oidc-groups-prefix", "")}${var.cluster_name}-cluster-admin"
@@ -98,13 +98,14 @@ EOT
     }
     apiServer = {
       certSANs  = local.cert_sans
-      extraArgs = local.oidc_enabled ? local.cluster_oidc : {}
+      extraArgs = local.cluster_oidc
     }
     inlineManifests = concat(local.oidc_inline_manifests, var.talos_inline_manifests)
   }
 
   controlplane_config_patches = [yamlencode({ machine = local.machine, cluster = merge(local.cluster, local.cluster_controlplane) })]
   worker_config_patches       = [yamlencode({ machine = local.machine, cluster = local.cluster })]
+  config_patches              = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
 }
 
 data "talos_machine_configuration" "this" {
@@ -117,18 +118,13 @@ data "talos_machine_configuration" "this" {
   talos_version      = var.talos_version
   kubernetes_version = var.kubernetes_version
 
-  config_patches = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
+  config_patches = local.config_patches
 
   lifecycle {
-    precondition {
-      condition     = !local.oidc_enabled || contains(keys(local.cluster_oidc), "oidc-client-id")
-      error_message = "oidc_client_id must be set when oidc_issuer_url is set: kube-apiserver does not start with only one of them."
-    }
-
     # Checked here because bootstrap and kubeconfig have no instance in an empty pool
     precondition {
-      condition     = var.type != "controlplane" || local.pool_size > 0
-      error_message = "A control-plane pool needs at least one node: set nodes to 1 or more, or give node_keys at least one key."
+      condition     = var.type != "controlplane" || length(var.node_keys) > 0
+      error_message = "A control-plane pool needs at least one node: give node_keys at least one key."
     }
   }
 }
@@ -147,19 +143,18 @@ resource "talos_machine_bootstrap" "this" {
   node                 = local.node_ips[0]
   client_configuration = var.talos_client_configuration
 
-  # A keyed pool waits for all its VMs: depends_on cannot pick the first key
+  # Waits for all VMs of the pool: depends_on cannot pick the first key
   depends_on = [
-    proxmox_virtual_environment_vm.this[0],
-    proxmox_virtual_environment_vm.keyed
+    proxmox_virtual_environment_vm.this
   ]
 }
 
 resource "talos_machine_configuration_apply" "this" {
-  count = local.node_count
+  for_each = toset(var.node_keys)
 
   client_configuration        = var.talos_client_configuration
   machine_configuration_input = data.talos_machine_configuration.this.machine_configuration
-  node                        = local.node_ips[count.index]
+  node                        = split("/", netbox_available_ip_address.this[each.key].ip_address)[0]
   apply_mode                  = var.apply_mode
 
   # Spelled out: the provider fails on an object that is unknown as a whole, which a
@@ -173,28 +168,6 @@ resource "talos_machine_configuration_apply" "this" {
   # Every VM must exist and, for control planes, etcd must be bootstrapped before config is applied
   depends_on = [
     proxmox_virtual_environment_vm.this,
-    talos_machine_bootstrap.this
-  ]
-}
-
-# Same as above for a pool with node_keys. Keep the two in sync
-resource "talos_machine_configuration_apply" "keyed" {
-  for_each = toset(local.node_keys)
-
-  client_configuration        = var.talos_client_configuration
-  machine_configuration_input = data.talos_machine_configuration.this.machine_configuration
-  node                        = split("/", netbox_available_ip_address.keyed[each.key].ip_address)[0]
-  apply_mode                  = var.apply_mode
-
-  on_destroy = {
-    graceful = var.on_destroy.graceful
-    reset    = var.on_destroy.reset
-    reboot   = var.on_destroy.reboot
-  }
-
-  # Every VM must exist and, for control planes, etcd must be bootstrapped before config is applied
-  depends_on = [
-    proxmox_virtual_environment_vm.keyed,
     talos_machine_bootstrap.this
   ]
 }

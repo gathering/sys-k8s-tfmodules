@@ -66,6 +66,21 @@ run "vlan" {
   }
 }
 
+run "null_gives_the_default" {
+  command = plan
+
+  variables {
+    interface     = null
+    prefix_length = null
+    vdom          = null
+  }
+
+  assert {
+    condition     = fortios_system_interface.this.interface == "fg-bond" && fortios_system_interface.this.vdom == "root" && netbox_available_prefix.this.prefix_length == 64
+    error_message = "A null input must give the module default."
+  }
+}
+
 run "name_must_fit_the_interface_alias" {
   command = plan
 

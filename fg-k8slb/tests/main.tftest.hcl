@@ -6,10 +6,14 @@ mock_provider "fortios" {}
 variables {
   cluster_name = "test"
   extip        = "2001:db8::1"
-  realservers  = ["2001:db8:0:1::c", "2001:db8:0:1::a", "2001:db8:0:1::b"]
-  dstintf      = ["vlan100"]
-  srcintf      = ["wan1", "wan2"]
-  srcaddr6     = ["all"]
+  realservers_by_key = {
+    a = { id = 3, ip = "2001:db8:0:1::a" }
+    b = { id = 10, ip = "2001:db8:0:1::b" }
+    c = { id = 2, ip = "2001:db8:0:1::c" }
+  }
+  dstintf  = ["vlan100"]
+  srcintf  = ["wan1", "wan2"]
+  srcaddr6 = ["all"]
 }
 
 run "vips" {
@@ -26,11 +30,11 @@ run "vips" {
 
   assert {
     condition = [for rs in fortios_firewall_vip6.this["talosctl-api"].realservers : [rs.id, rs.ip, rs.port]] == [
-      [1, "2001:db8:0:1::a", 50000],
-      [2, "2001:db8:0:1::b", 50000],
-      [3, "2001:db8:0:1::c", 50000],
+      [2, "2001:db8:0:1::c", 50000],
+      [3, "2001:db8:0:1::a", 50000],
+      [10, "2001:db8:0:1::b", 50000],
     ]
-    error_message = "Realservers must be numbered in sorted address order and use the VIP port."
+    error_message = "Realservers must carry their given ids, in id order, and use the VIP port."
   }
 
   assert {
@@ -39,33 +43,10 @@ run "vips" {
   }
 }
 
-run "realservers_by_key" {
-  command = plan
-
-  variables {
-    realservers = null
-    realservers_by_key = {
-      a = { id = 3, ip = "2001:db8:0:1::a" }
-      b = { id = 10, ip = "2001:db8:0:1::b" }
-      c = { id = 2, ip = "2001:db8:0:1::c" }
-    }
-  }
-
-  assert {
-    condition = [for rs in fortios_firewall_vip6.this["k8s-api"].realservers : [rs.id, rs.ip, rs.port]] == [
-      [2, "2001:db8:0:1::c", 6443],
-      [3, "2001:db8:0:1::a", 6443],
-      [10, "2001:db8:0:1::b", 6443],
-    ]
-    error_message = "Realservers must carry their given ids, in id order."
-  }
-}
-
 run "realservers_by_key_without_the_middle_one" {
   command = plan
 
   variables {
-    realservers = null
     realservers_by_key = {
       b = { id = 10, ip = "2001:db8:0:1::b" }
       c = { id = 2, ip = "2001:db8:0:1::c" }
@@ -81,60 +62,36 @@ run "realservers_by_key_without_the_middle_one" {
   }
 }
 
-# The ids a list gives are a valid input for the map: this is how an existing load balancer is moved over
-run "realservers_by_key_with_the_ids_of_the_list" {
+run "realservers_must_not_be_empty" {
   command = plan
 
   variables {
-    realservers = null
-    realservers_by_key = {
-      x = { id = 3, ip = "2001:db8:0:1::c" }
-      y = { id = 1, ip = "2001:db8:0:1::a" }
-      z = { id = 2, ip = "2001:db8:0:1::b" }
-    }
+    realservers_by_key = {}
+  }
+
+  expect_failures = [
+    var.realservers_by_key,
+  ]
+}
+
+run "null_gives_the_default" {
+  command = plan
+
+  variables {
+    monitor         = null
+    ssl_ssh_profile = null
   }
 
   assert {
-    condition = [for rs in fortios_firewall_vip6.this["talosctl-api"].realservers : [rs.id, rs.ip, rs.port]] == [
-      [1, "2001:db8:0:1::a", 50000],
-      [2, "2001:db8:0:1::b", 50000],
-      [3, "2001:db8:0:1::c", 50000],
-    ]
-    error_message = "A map with the ids the list gave must render the same realservers as the list."
+    condition     = alltrue([for vip in fortios_firewall_vip6.this : toset(vip.monitor[*].name) == toset(["tcp-check"])])
+    error_message = "A null monitor must give the module default."
   }
-}
-
-run "realservers_and_realservers_by_key_exclude_each_other" {
-  command = plan
-
-  variables {
-    realservers_by_key = {
-      a = { id = 1, ip = "2001:db8:0:1::a" }
-    }
-  }
-
-  expect_failures = [
-    fortios_firewall_vip6.this,
-  ]
-}
-
-run "one_of_realservers_and_realservers_by_key_is_required" {
-  command = plan
-
-  variables {
-    realservers = null
-  }
-
-  expect_failures = [
-    fortios_firewall_vip6.this,
-  ]
 }
 
 run "realserver_ids_must_be_unique" {
   command = plan
 
   variables {
-    realservers = null
     realservers_by_key = {
       a = { id = 1, ip = "2001:db8:0:1::a" }
       b = { id = 1, ip = "2001:db8:0:1::b" }
