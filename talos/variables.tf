@@ -376,6 +376,20 @@ variable "allow_scheduling_on_control_planes" {
   nullable    = false
 }
 
+variable "kubernetes_talos_api_access" {
+  description = "Let pods in `allowed_kubernetes_namespaces` reach the Talos API with `allowed_roles`, `os:etcd:backup` for an etcd backup job for example. `null` leaves it off. Only applied through control planes"
+  type = object({
+    allowed_roles                 = list(string)
+    allowed_kubernetes_namespaces = list(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.kubernetes_talos_api_access == null || try(length(var.kubernetes_talos_api_access.allowed_roles) > 0 && length(var.kubernetes_talos_api_access.allowed_kubernetes_namespaces) > 0, false)
+    error_message = "kubernetes_talos_api_access needs at least one role and one namespace: without either, no pod gets access."
+  }
+}
+
 variable "oidc" {
   description = "OIDC for kube-apiserver. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `\"\"` to give the users no groups, and a prefix to `\"\"` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding, which `cluster_admin_binding = false` leaves out"
   type = object({

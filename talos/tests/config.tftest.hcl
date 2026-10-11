@@ -445,6 +445,50 @@ run "oidc_without_groups_prefix" {
   }
 }
 
+run "kubernetes_talos_api_access" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets       = run.setup.machine_secrets
+    talos_client_configuration  = run.setup.client_configuration
+    type                        = "controlplane"
+    kubernetes_talos_api_access = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = ["talos-backup"] }
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.features.kubernetesTalosAPIAccess == { enabled = true, allowedRoles = ["os:etcd:backup"], allowedKubernetesNamespaces = ["talos-backup"] }
+    error_message = "Expected Talos API access for the role and the namespace."
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1"]
+    error_message = "The patch must leave the rest of the machine document alone."
+  }
+}
+
+run "kubernetes_talos_api_access_needs_a_role_and_a_namespace" {
+  command = plan
+
+  variables {
+    talos_machine_secrets       = run.setup.machine_secrets
+    talos_client_configuration  = run.setup.client_configuration
+    type                        = "controlplane"
+    kubernetes_talos_api_access = { allowed_roles = [], allowed_kubernetes_namespaces = ["talos-backup"] }
+  }
+
+  expect_failures = [var.kubernetes_talos_api_access]
+}
+
 run "worker" {
   override_resource {
     target = talos_machine_bootstrap.this
@@ -465,6 +509,7 @@ run "worker" {
     node_keys                          = ["a", "b"]
     oidc                               = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes" }
     allow_scheduling_on_control_planes = true
+    kubernetes_talos_api_access        = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = ["talos-backup"] }
   }
 
   assert {
@@ -485,6 +530,11 @@ run "worker" {
   assert {
     condition     = alltrue([for patch in output.config_patches : !strcontains(patch, "oidc") && !strcontains(patch, "extra") && !strcontains(patch, "KubeNodeConfig")])
     error_message = "OIDC settings, talos_inline_manifests and the scheduling setting must only reach control planes."
+  }
+
+  assert {
+    condition     = alltrue([for patch in output.config_patches : !strcontains(patch, "kubernetesTalosAPIAccess")]) && try(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.features.kubernetesTalosAPIAccess, null) == null
+    error_message = "Talos API access from Kubernetes must only reach control planes: Talos rejects it on a worker."
   }
 
   assert {

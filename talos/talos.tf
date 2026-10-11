@@ -84,6 +84,15 @@ EOT
     }),
   ] : []
 
+  # Talos rejects this on a worker. It is part of the v1alpha1 machine document
+  talos_api_access_config_patches = var.kubernetes_talos_api_access != null ? [
+    yamlencode({ machine = { features = { kubernetesTalosAPIAccess = {
+      enabled                     = true
+      allowedRoles                = var.kubernetes_talos_api_access.allowed_roles
+      allowedKubernetesNamespaces = var.kubernetes_talos_api_access.allowed_kubernetes_namespaces
+    } } } }),
+  ] : []
+
   # What only control planes get. No kube-proxy and no Flannel: the cluster brings its own CNI
   controlplane_config_patches = concat(
     local.node_config_patches,
@@ -94,6 +103,7 @@ EOT
     ],
     local.scheduling_config_patches,
     local.oidc_config_patches,
+    local.talos_api_access_config_patches,
     [
       for manifest in concat(local.oidc_inline_manifests, var.talos_inline_manifests) :
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeInlineManifestConfig", name = manifest.name, manifest = manifest.contents })

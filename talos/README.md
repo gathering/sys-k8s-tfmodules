@@ -19,7 +19,7 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.3.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.4.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -138,6 +138,19 @@ With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the 
 
 Talos creates the objects of an inline manifest when they are missing and leaves existing ones alone. After changing `groups_prefix` or turning OIDC off on a running cluster, delete the old binding yourself: `kubectl delete clusterrolebinding oidc-<cluster_name>-cluster-admin`. The same goes for `talos_inline_manifests`.
 
+## Talos API access from Kubernetes
+
+`kubernetes_talos_api_access` lets pods reach the Talos API, for a job that backs up etcd for example. It is off by default.
+
+```hcl
+kubernetes_talos_api_access = {
+  allowed_roles                 = ["os:etcd:backup"]
+  allowed_kubernetes_namespaces = ["talos-backup"]
+}
+```
+
+Set it on the control-plane pool: Talos accepts the setting on control planes only, and the module leaves it out of a worker config. Whoever can create a `ServiceAccount` of `talos.dev` in one of the namespaces gets credentials for any of the roles, so name a namespace of its own and no more roles than the workload needs.
+
 ## Machine config patches
 
 The config is the one Talos generates for `talos_version`, with one patch per configuration document on top:
@@ -145,6 +158,7 @@ The config is the one Talos generates for `talos_version`, with one patch per co
 | Document | Nodes | What the module sets |
 |---|---|---|
 | `machine` (v1alpha1) | all | `certSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
+| `machine` (v1alpha1) | control planes | `features.kubernetesTalosAPIAccess`, with `kubernetes_talos_api_access` |
 | `ResolverConfig` | all | `nameservers` |
 | `TimeSyncConfig` | all | `time_servers` |
 | `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
@@ -229,6 +243,7 @@ No modules.
 | <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
 | <a name="input_extra_cert_sans"></a> [extra\_cert\_sans](#input\_extra\_cert\_sans) | More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example | `list(string)` | `[]` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
+| <a name="input_kubernetes_talos_api_access"></a> [kubernetes\_talos\_api\_access](#input\_kubernetes\_talos\_api\_access) | Let pods in `allowed_kubernetes_namespaces` reach the Talos API with `allowed_roles`, `os:etcd:backup` for an etcd backup job for example. `null` leaves it off. Only applied through control planes | <pre>object({<br/>    allowed_roles                 = list(string)<br/>    allowed_kubernetes_namespaces = list(string)<br/>  })</pre> | `null` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version | `string` | `"v1.35.5"` | no |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |
 | <a name="input_nameservers"></a> [nameservers](#input\_nameservers) | DNS Servers. Use DNS64 if this is a IPv6 only cluster | `list(string)` | <pre>[<br/>  "2606:4700:4700::64"<br/>]</pre> | no |

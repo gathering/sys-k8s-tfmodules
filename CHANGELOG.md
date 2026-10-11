@@ -2,6 +2,14 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.4.0 - 2026-10-12
+
+Nothing changes for a cluster that does not set the new input.
+
+### Added
+
+- `talos`: `kubernetes_talos_api_access`, the roles and namespaces that pods may reach the Talos API with (`machine.features.kubernetesTalosAPIAccess`). Off by default and only applied through control planes. Setting it changes the machine config of every control plane, which is re-applied. Rendering is tested and the result passes `talosctl validate`; not applied to a running cluster.
+
 ## v0.3.0 - 2026-10-10
 
 `talos`: the machine config is built from the configuration documents of Talos 1.14. Nodes must run Talos 1.14 or later, and `talos_version` must be v1.14 or later: an older value is rejected at plan time. See [UPGRADING.md](./UPGRADING.md) before moving a running cluster.
