@@ -8,7 +8,7 @@ Nothing changes for a cluster that does not set the new input.
 
 ### Added
 
-- `talos`: `kubernetes_talos_api_access`, the roles and namespaces that pods may reach the Talos API with (`machine.features.kubernetesTalosAPIAccess`). Off by default and only applied through control planes. Setting it changes the machine config of every control plane, which is re-applied. Rendering is tested and the result passes `talosctl validate`; not applied to a running cluster.
+- `talos`: `kubernetes_talos_api_access`, the roles and namespaces that pods may reach the Talos API with (`machine.features.kubernetesTalosAPIAccess`). Off by default and only applied through control planes. Setting it changes the machine config of every control plane, which is re-applied. Rendering is tested, and the same patch on a config from `talosctl gen config` passes `talosctl validate` for a control plane; not applied to a running cluster.
 
 ## v0.3.0 - 2026-10-10
 

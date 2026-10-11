@@ -153,7 +153,7 @@ Set it on the control-plane pool: Talos accepts the setting on control planes on
 
 ## Machine config patches
 
-The config is the one Talos generates for `talos_version`, with one patch per configuration document on top:
+The config is the one Talos generates for `talos_version`, with one patch per configuration document on top, and a second one for the `machine` document on control planes:
 
 | Document | Nodes | What the module sets |
 |---|---|---|

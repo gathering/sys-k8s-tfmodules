@@ -471,12 +471,12 @@ run "kubernetes_talos_api_access" {
   }
 
   assert {
-    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1"]
-    error_message = "The patch must leave the rest of the machine document alone."
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1"] && yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.features.diskQuotaSupport == true
+    error_message = "The patch must leave the rest of the machine document alone, the other features included."
   }
 }
 
-run "kubernetes_talos_api_access_needs_a_role_and_a_namespace" {
+run "kubernetes_talos_api_access_needs_a_role" {
   command = plan
 
   variables {
@@ -484,6 +484,19 @@ run "kubernetes_talos_api_access_needs_a_role_and_a_namespace" {
     talos_client_configuration  = run.setup.client_configuration
     type                        = "controlplane"
     kubernetes_talos_api_access = { allowed_roles = [], allowed_kubernetes_namespaces = ["talos-backup"] }
+  }
+
+  expect_failures = [var.kubernetes_talos_api_access]
+}
+
+run "kubernetes_talos_api_access_needs_a_namespace" {
+  command = plan
+
+  variables {
+    talos_machine_secrets       = run.setup.machine_secrets
+    talos_client_configuration  = run.setup.client_configuration
+    type                        = "controlplane"
+    kubernetes_talos_api_access = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = [] }
   }
 
   expect_failures = [var.kubernetes_talos_api_access]

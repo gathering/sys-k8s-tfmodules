@@ -39,7 +39,8 @@ EOT
 
   # The config is the one Talos generates for talos_version, with the documents below
   # patched in, one patch per document and in this order. A document with `$patch = "delete"`
-  # takes the generated one out.
+  # takes the generated one out. The v1alpha1 machine document gets a second patch on
+  # control planes, for what workers must not get.
 
   # What every node gets
   node_config_patches = [
