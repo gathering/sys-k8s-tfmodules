@@ -4,13 +4,13 @@ All notable changes to these modules are listed here. Versions are git tags; pin
 
 ## v0.4.0 - 2026-10-12
 
-A plan on an existing cluster shows the machine config of every control plane changing, for the metrics ports: the snippet files are replaced and the config is re-applied. Workers show no change.
+A plan on an existing cluster shows the machine config of every control plane changing, for the metrics ports: the snippet files are replaced and the config is re-applied. Workers show no change. After it, every control plane serves the metrics of etcd, kube-controller-manager and kube-scheduler on all its addresses: check the firewall first, or turn them off with `etcd_listen_metrics_urls = []` and `null` for the two bind addresses.
 
 ### Added
 
 - `talos`: `kubernetes_talos_api_access`, the roles and namespaces that pods may reach the Talos API with (`machine.features.kubernetesTalosAPIAccess`). Off by default and only applied through control planes. Setting it changes the machine config of every control plane, which is re-applied. Rendering is tested, and the same patch on a config from `talosctl gen config` passes `talosctl validate` for a control plane; not applied to a running cluster.
-- `talos`: `etcd_listen_metrics_urls`, default `["http://[::]:2381"]`: etcd on the control planes serves `/metrics` and `/health` over plain HTTP on port 2381 of every address, IPv6 included (`cluster.etcd.extraArgs.listen-metrics-urls`). The port takes no client certificate: limit it in the firewall, or set `[]` to leave it off. Tested the same way, and not applied to a running cluster either.
-- `talos`: `controller_manager_bind_address` and `scheduler_bind_address`, default `"::"`: kube-controller-manager (port 10257) and kube-scheduler (port 10259) on the control planes serve metrics on every address, IPv6 included, instead of 127.0.0.1 (`extraArgs.bind-address` of `KubeControllerManagerConfig` and `KubeSchedulerConfig`). `null` leaves it to Talos. Tested the same way, and not applied to a running cluster either.
+- `talos`: `etcd_listen_metrics_urls`, default `["http://[::]:2381"]`: etcd on the control planes serves `/metrics` and `/health` over plain HTTP on port 2381 of every address, IPv6 included (`cluster.etcd.extraArgs.listen-metrics-urls`). The port takes no client certificate: limit it in the firewall, or set `[]` to leave it off. On a running cluster the port may only open after a reboot of the control plane. Tested the same way, and not applied to a running cluster either.
+- `talos`: `controller_manager_bind_address` and `scheduler_bind_address`, default `"::"`: kube-controller-manager (port 10257) and kube-scheduler (port 10259) on the control planes serve metrics on every address, IPv6 included, instead of 127.0.0.1 (`extraArgs.bind-address` of `KubeControllerManagerConfig` and `KubeSchedulerConfig`). `0.0.0.0` is IPv4 only and `null` leaves it to Talos; one address of the node is rejected, because Talos probes both on `localhost`. Tested the same way, and not applied to a running cluster either.
 
 ## v0.3.0 - 2026-10-10
 

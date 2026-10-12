@@ -644,12 +644,12 @@ run "bind_addresses" {
     talos_machine_secrets           = run.setup.machine_secrets
     talos_client_configuration      = run.setup.client_configuration
     type                            = "controlplane"
-    controller_manager_bind_address = "2001:db8:0:1::abcd"
+    controller_manager_bind_address = "0.0.0.0"
     scheduler_bind_address          = null
   }
 
   assert {
-    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].extraArgs == { "bind-address" = "2001:db8:0:1::abcd" }
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].extraArgs == { "bind-address" = "0.0.0.0" }
     error_message = "Expected kube-controller-manager to bind to the address given."
   }
 
@@ -659,7 +659,7 @@ run "bind_addresses" {
   }
 }
 
-run "bind_address_must_be_an_address" {
+run "bind_address_must_be_a_wildcard" {
   command = plan
 
   variables {
@@ -667,7 +667,7 @@ run "bind_address_must_be_an_address" {
     talos_client_configuration      = run.setup.client_configuration
     type                            = "controlplane"
     controller_manager_bind_address = "[::]"
-    scheduler_bind_address          = "::/0"
+    scheduler_bind_address          = "2001:db8:0:1::abcd"
   }
 
   expect_failures = [var.controller_manager_bind_address, var.scheduler_bind_address]

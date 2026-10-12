@@ -403,24 +403,24 @@ variable "etcd_listen_metrics_urls" {
 }
 
 variable "controller_manager_bind_address" {
-  description = "Address kube-controller-manager serves `/metrics` and its health endpoints on, over HTTPS on port 10257 (`bind-address`), for Prometheus to scrape. The default is every address, IPv6 included. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
+  description = "Address kube-controller-manager serves `/metrics` and its health endpoints on, over HTTPS on port 10257 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
   type        = string
   default     = "::"
 
   validation {
-    condition     = var.controller_manager_bind_address == null || can(cidrhost("${var.controller_manager_bind_address}/128", 0)) || can(cidrnetmask("${var.controller_manager_bind_address}/32"))
-    error_message = "controller_manager_bind_address must be an IPv6 or IPv4 address without brackets or port, `::` for all."
+    condition     = var.controller_manager_bind_address == null || contains(["::", "0.0.0.0"], var.controller_manager_bind_address)
+    error_message = "controller_manager_bind_address must be `::`, `0.0.0.0` or null: Talos probes kube-controller-manager on localhost, so it cannot bind to one address of the node."
   }
 }
 
 variable "scheduler_bind_address" {
-  description = "Address kube-scheduler serves `/metrics` and its health endpoints on, over HTTPS on port 10259 (`bind-address`), for Prometheus to scrape. The default is every address, IPv6 included. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
+  description = "Address kube-scheduler serves `/metrics` and its health endpoints on, over HTTPS on port 10259 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
   type        = string
   default     = "::"
 
   validation {
-    condition     = var.scheduler_bind_address == null || can(cidrhost("${var.scheduler_bind_address}/128", 0)) || can(cidrnetmask("${var.scheduler_bind_address}/32"))
-    error_message = "scheduler_bind_address must be an IPv6 or IPv4 address without brackets or port, `::` for all."
+    condition     = var.scheduler_bind_address == null || contains(["::", "0.0.0.0"], var.scheduler_bind_address)
+    error_message = "scheduler_bind_address must be `::`, `0.0.0.0` or null: Talos probes kube-scheduler on localhost, so it cannot bind to one address of the node."
   }
 }
 

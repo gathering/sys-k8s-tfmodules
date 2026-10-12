@@ -39,8 +39,8 @@ EOT
 
   # The config is the one Talos generates for talos_version, with the documents below
   # patched in, one patch per document and in this order. A document with `$patch = "delete"`
-  # takes the generated one out. The v1alpha1 machine document gets more patches on
-  # control planes, for what workers must not get.
+  # takes the generated one out. The v1alpha1 document gets more patches on control
+  # planes, for what workers must not get.
 
   # What every node gets
   node_config_patches = [
@@ -94,14 +94,13 @@ EOT
     } } } }),
   ] : []
 
-  # Talos rejects this on a worker too. It is part of the v1alpha1 cluster section. `[::]`
-  # also takes IPv4 where the node has it
+  # Talos rejects this on a worker too. It is part of the v1alpha1 cluster section
   etcd_metrics_config_patches = length(var.etcd_listen_metrics_urls) > 0 ? [
     yamlencode({ cluster = { etcd = { extraArgs = { "listen-metrics-urls" = join(",", var.etcd_listen_metrics_urls) } } } }),
   ] : []
 
-  # Talos generates both with 127.0.0.1, where nothing can scrape them. `::` also takes IPv4
-  # where the node has it
+  # Talos generates both with 127.0.0.1, where nothing can scrape them, and probes them on
+  # localhost: only a wildcard address keeps the probes working. `::` also takes IPv4
   bind_address_config_patches = [
     for kind, address in {
       KubeControllerManagerConfig = var.controller_manager_bind_address
