@@ -407,8 +407,9 @@ variable "controller_manager_bind_address" {
   type        = string
   default     = "::"
 
+  # coalesce: OpenTofu before 1.9 evaluates both sides of `||`, and contains fails on null
   validation {
-    condition     = var.controller_manager_bind_address == null || contains(["::", "0.0.0.0"], var.controller_manager_bind_address)
+    condition     = contains(["::", "0.0.0.0"], coalesce(var.controller_manager_bind_address, "::"))
     error_message = "controller_manager_bind_address must be `::`, `0.0.0.0` or null: Talos probes kube-controller-manager on localhost, so it cannot bind to one address of the node."
   }
 }
@@ -419,7 +420,7 @@ variable "scheduler_bind_address" {
   default     = "::"
 
   validation {
-    condition     = var.scheduler_bind_address == null || contains(["::", "0.0.0.0"], var.scheduler_bind_address)
+    condition     = contains(["::", "0.0.0.0"], coalesce(var.scheduler_bind_address, "::"))
     error_message = "scheduler_bind_address must be `::`, `0.0.0.0` or null: Talos probes kube-scheduler on localhost, so it cannot bind to one address of the node."
   }
 }
