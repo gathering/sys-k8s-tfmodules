@@ -39,7 +39,7 @@ EOT
 
   # The config is the one Talos generates for talos_version, with the documents below
   # patched in, one patch per document and in this order. A document with `$patch = "delete"`
-  # takes the generated one out. The v1alpha1 machine document gets a second patch on
+  # takes the generated one out. The v1alpha1 machine document gets more patches on
   # control planes, for what workers must not get.
 
   # What every node gets
@@ -94,6 +94,12 @@ EOT
     } } } }),
   ] : []
 
+  # Talos rejects this on a worker too. It is part of the v1alpha1 cluster section. `[::]`
+  # also takes IPv4 where the node has it
+  etcd_metrics_config_patches = length(var.etcd_listen_metrics_urls) > 0 ? [
+    yamlencode({ cluster = { etcd = { extraArgs = { "listen-metrics-urls" = join(",", var.etcd_listen_metrics_urls) } } } }),
+  ] : []
+
   # What only control planes get. No kube-proxy and no Flannel: the cluster brings its own CNI
   controlplane_config_patches = concat(
     local.node_config_patches,
@@ -105,6 +111,7 @@ EOT
     local.scheduling_config_patches,
     local.oidc_config_patches,
     local.talos_api_access_config_patches,
+    local.etcd_metrics_config_patches,
     [
       for manifest in concat(local.oidc_inline_manifests, var.talos_inline_manifests) :
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeInlineManifestConfig", name = manifest.name, manifest = manifest.contents })

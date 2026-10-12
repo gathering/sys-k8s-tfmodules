@@ -151,14 +151,25 @@ kubernetes_talos_api_access = {
 
 Set it on the control-plane pool: Talos accepts the setting on control planes only, and the module leaves it out of a worker config. Whoever can create a `ServiceAccount` of `talos.dev` in one of the namespaces gets credentials for any of the roles, so name a namespace of its own and no more roles than the workload needs.
 
+## etcd metrics
+
+etcd serves `/metrics` and `/health` over plain HTTP on port 2381 of every control plane, for Prometheus to scrape. By default it listens on `[::]`, which is every address of the node:
+
+```hcl
+etcd_listen_metrics_urls = ["http://[::]:2381"]
+```
+
+The port takes no client certificate, and anyone who reaches it can read the metrics. Limit it in the firewall, or name the addresses to listen on. `etcd_listen_metrics_urls = []` turns the port off: etcd then serves metrics on its client port only, with a client certificate.
+
 ## Machine config patches
 
-The config is the one Talos generates for `talos_version`, with one patch per configuration document on top, and a second one for the `machine` document on control planes:
+The config is the one Talos generates for `talos_version`, with one patch per configuration document on top, and more for the v1alpha1 document on control planes:
 
 | Document | Nodes | What the module sets |
 |---|---|---|
 | `machine` (v1alpha1) | all | `certSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
 | `machine` (v1alpha1) | control planes | `features.kubernetesTalosAPIAccess`, with `kubernetes_talos_api_access` |
+| `cluster` (v1alpha1) | control planes | `etcd.extraArgs.listen-metrics-urls`: `etcd_listen_metrics_urls` |
 | `ResolverConfig` | all | `nameservers` |
 | `TimeSyncConfig` | all | `time_servers` |
 | `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
@@ -241,6 +252,7 @@ No modules.
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
 | <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
+| <a name="input_etcd_listen_metrics_urls"></a> [etcd\_listen\_metrics\_urls](#input\_etcd\_listen\_metrics\_urls) | URLs etcd serves `/metrics` and `/health` on without client certificates (`cluster.etcd.extraArgs.listen-metrics-urls`), for Prometheus to scrape. The default listens on all addresses, IPv6 included. `[]` leaves it to etcd, which then serves metrics on its client port with certificates only. Only applied through control planes | `list(string)` | <pre>[<br/>  "http://[::]:2381"<br/>]</pre> | no |
 | <a name="input_extra_cert_sans"></a> [extra\_cert\_sans](#input\_extra\_cert\_sans) | More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example | `list(string)` | `[]` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
 | <a name="input_kubernetes_talos_api_access"></a> [kubernetes\_talos\_api\_access](#input\_kubernetes\_talos\_api\_access) | Let pods in `allowed_kubernetes_namespaces` reach the Talos API with `allowed_roles`, `os:etcd:backup` for an etcd backup job for example. `null` leaves it off. Only applied through control planes | <pre>object({<br/>    allowed_roles                 = list(string)<br/>    allowed_kubernetes_namespaces = list(string)<br/>  })</pre> | `null` | no |

@@ -502,6 +502,101 @@ run "kubernetes_talos_api_access_needs_a_namespace" {
   expect_failures = [var.kubernetes_talos_api_access]
 }
 
+run "etcd_metrics_listen_on_ipv6_by_default" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.extraArgs == { "listen-metrics-urls" = "http://[::]:2381" }
+    error_message = "By default etcd must serve metrics on the IPv6 wildcard address, port 2381."
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.ca.crt != ""
+    error_message = "The patch must leave the rest of the etcd section alone."
+  }
+}
+
+run "etcd_listen_metrics_urls" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    etcd_listen_metrics_urls   = ["http://[::1]:2381", "http://[2001:db8:0:1::abcd]:2381"]
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.extraArgs == { "listen-metrics-urls" = "http://[::1]:2381,http://[2001:db8:0:1::abcd]:2381" }
+    error_message = "Expected the URLs given, joined with a comma."
+  }
+}
+
+run "etcd_listen_metrics_urls_off" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    etcd_listen_metrics_urls   = []
+  }
+
+  assert {
+    condition     = !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.extraArgs)
+    error_message = "Without URLs the etcd arguments must be left to Talos."
+  }
+}
+
+run "etcd_listen_metrics_urls_must_be_urls" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    etcd_listen_metrics_urls   = ["[::]:2381"]
+  }
+
+  expect_failures = [var.etcd_listen_metrics_urls]
+}
+
 run "worker" {
   override_resource {
     target = talos_machine_bootstrap.this
@@ -533,6 +628,11 @@ run "worker" {
   assert {
     condition     = output.config_patches == tolist(local.worker_config_patches) && data.talos_machine_configuration.this.config_patches == tolist(local.worker_config_patches)
     error_message = "Workers must get the worker patches."
+  }
+
+  assert {
+    condition     = !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd)
+    error_message = "Workers must not get the etcd metrics URLs: Talos rejects etcd config on a worker."
   }
 
   assert {
