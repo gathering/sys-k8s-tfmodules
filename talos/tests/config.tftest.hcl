@@ -597,6 +597,82 @@ run "etcd_listen_metrics_urls_must_be_urls" {
   expect_failures = [var.etcd_listen_metrics_urls]
 }
 
+run "bind_addresses_are_ipv6_by_default" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].extraArgs == { "bind-address" = "::" } && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeSchedulerConfig\n")][0].extraArgs == { "bind-address" = "::" }
+    error_message = "By default kube-controller-manager and kube-scheduler must bind to the IPv6 wildcard address."
+  }
+
+  assert {
+    condition     = startswith([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].image, "registry.k8s.io/kube-controller-manager:") && startswith([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeSchedulerConfig\n")][0].image, "registry.k8s.io/kube-scheduler:")
+    error_message = "The patches must leave the rest of both documents alone."
+  }
+}
+
+run "bind_addresses" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets           = run.setup.machine_secrets
+    talos_client_configuration      = run.setup.client_configuration
+    type                            = "controlplane"
+    controller_manager_bind_address = "2001:db8:0:1::abcd"
+    scheduler_bind_address          = null
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].extraArgs == { "bind-address" = "2001:db8:0:1::abcd" }
+    error_message = "Expected kube-controller-manager to bind to the address given."
+  }
+
+  assert {
+    condition     = !can([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeSchedulerConfig\n")][0].extraArgs)
+    error_message = "With null the kube-scheduler arguments must be left to Talos."
+  }
+}
+
+run "bind_address_must_be_an_address" {
+  command = plan
+
+  variables {
+    talos_machine_secrets           = run.setup.machine_secrets
+    talos_client_configuration      = run.setup.client_configuration
+    type                            = "controlplane"
+    controller_manager_bind_address = "[::]"
+    scheduler_bind_address          = "::/0"
+  }
+
+  expect_failures = [var.controller_manager_bind_address, var.scheduler_bind_address]
+}
+
 run "worker" {
   override_resource {
     target = talos_machine_bootstrap.this
@@ -636,7 +712,7 @@ run "worker" {
   }
 
   assert {
-    condition     = [for kind in ["KubeAPIServerConfig", "KubeAuthenticationConfig", "KubeInlineManifestConfig", "KubeProxyConfig", "KubeFlannelCNIConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 0, 0, 0]
+    condition     = [for kind in ["KubeAPIServerConfig", "KubeAuthenticationConfig", "KubeInlineManifestConfig", "KubeProxyConfig", "KubeFlannelCNIConfig", "KubeControllerManagerConfig", "KubeSchedulerConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 0, 0, 0, 0, 0]
     error_message = "Workers must not get what only control planes act on."
   }
 

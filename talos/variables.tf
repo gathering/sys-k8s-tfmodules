@@ -402,6 +402,28 @@ variable "etcd_listen_metrics_urls" {
   }
 }
 
+variable "controller_manager_bind_address" {
+  description = "Address kube-controller-manager serves `/metrics` and its health endpoints on, over HTTPS on port 10257 (`bind-address`), for Prometheus to scrape. The default is every address, IPv6 included. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
+  type        = string
+  default     = "::"
+
+  validation {
+    condition     = var.controller_manager_bind_address == null || can(cidrhost("${var.controller_manager_bind_address}/128", 0)) || can(cidrnetmask("${var.controller_manager_bind_address}/32"))
+    error_message = "controller_manager_bind_address must be an IPv6 or IPv4 address without brackets or port, `::` for all."
+  }
+}
+
+variable "scheduler_bind_address" {
+  description = "Address kube-scheduler serves `/metrics` and its health endpoints on, over HTTPS on port 10259 (`bind-address`), for Prometheus to scrape. The default is every address, IPv6 included. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
+  type        = string
+  default     = "::"
+
+  validation {
+    condition     = var.scheduler_bind_address == null || can(cidrhost("${var.scheduler_bind_address}/128", 0)) || can(cidrnetmask("${var.scheduler_bind_address}/32"))
+    error_message = "scheduler_bind_address must be an IPv6 or IPv4 address without brackets or port, `::` for all."
+  }
+}
+
 variable "oidc" {
   description = "OIDC for kube-apiserver. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `\"\"` to give the users no groups, and a prefix to `\"\"` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding, which `cluster_admin_binding = false` leaves out"
   type = object({

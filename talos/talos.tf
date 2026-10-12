@@ -100,6 +100,15 @@ EOT
     yamlencode({ cluster = { etcd = { extraArgs = { "listen-metrics-urls" = join(",", var.etcd_listen_metrics_urls) } } } }),
   ] : []
 
+  # Talos generates both with 127.0.0.1, where nothing can scrape them. `::` also takes IPv4
+  # where the node has it
+  bind_address_config_patches = [
+    for kind, address in {
+      KubeControllerManagerConfig = var.controller_manager_bind_address
+      KubeSchedulerConfig         = var.scheduler_bind_address
+    } : yamlencode({ apiVersion = "v1alpha1", kind = kind, extraArgs = { "bind-address" = address } }) if address != null
+  ]
+
   # What only control planes get. No kube-proxy and no Flannel: the cluster brings its own CNI
   controlplane_config_patches = concat(
     local.node_config_patches,
@@ -112,6 +121,7 @@ EOT
     local.oidc_config_patches,
     local.talos_api_access_config_patches,
     local.etcd_metrics_config_patches,
+    local.bind_address_config_patches,
     [
       for manifest in concat(local.oidc_inline_manifests, var.talos_inline_manifests) :
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeInlineManifestConfig", name = manifest.name, manifest = manifest.contents })
