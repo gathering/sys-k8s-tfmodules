@@ -39,7 +39,8 @@ EOT
 
   # The config is the one Talos generates for talos_version, with the documents below
   # patched in, one patch per document and in this order. A document with `$patch = "delete"`
-  # takes the generated one out.
+  # takes the generated one out. The v1alpha1 document gets more patches on control
+  # planes, for what workers must not get.
 
   # What every node gets
   node_config_patches = [
@@ -84,6 +85,29 @@ EOT
     }),
   ] : []
 
+  # Talos rejects this on a worker. It is part of the v1alpha1 machine document
+  talos_api_access_config_patches = var.kubernetes_talos_api_access != null ? [
+    yamlencode({ machine = { features = { kubernetesTalosAPIAccess = {
+      enabled                     = true
+      allowedRoles                = var.kubernetes_talos_api_access.allowed_roles
+      allowedKubernetesNamespaces = var.kubernetes_talos_api_access.allowed_kubernetes_namespaces
+    } } } }),
+  ] : []
+
+  # Talos rejects this on a worker too. It is part of the v1alpha1 cluster section
+  etcd_metrics_config_patches = length(var.etcd_listen_metrics_urls) > 0 ? [
+    yamlencode({ cluster = { etcd = { extraArgs = { "listen-metrics-urls" = join(",", var.etcd_listen_metrics_urls) } } } }),
+  ] : []
+
+  # Talos generates both with 127.0.0.1, where nothing can scrape them, and probes them on
+  # localhost: only a wildcard address keeps the probes working. `::` also takes IPv4
+  bind_address_config_patches = [
+    for kind, address in {
+      KubeControllerManagerConfig = var.controller_manager_bind_address
+      KubeSchedulerConfig         = var.scheduler_bind_address
+    } : yamlencode({ apiVersion = "v1alpha1", kind = kind, extraArgs = { "bind-address" = address } }) if address != null
+  ]
+
   # What only control planes get. No kube-proxy and no Flannel: the cluster brings its own CNI
   controlplane_config_patches = concat(
     local.node_config_patches,
@@ -94,6 +118,9 @@ EOT
     ],
     local.scheduling_config_patches,
     local.oidc_config_patches,
+    local.talos_api_access_config_patches,
+    local.etcd_metrics_config_patches,
+    local.bind_address_config_patches,
     [
       for manifest in concat(local.oidc_inline_manifests, var.talos_inline_manifests) :
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeInlineManifestConfig", name = manifest.name, manifest = manifest.contents })

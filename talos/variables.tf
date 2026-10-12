@@ -376,6 +376,55 @@ variable "allow_scheduling_on_control_planes" {
   nullable    = false
 }
 
+variable "kubernetes_talos_api_access" {
+  description = "Let pods in `allowed_kubernetes_namespaces` reach the Talos API with `allowed_roles`, `os:etcd:backup` for an etcd backup job for example. `null` leaves it off. Only applied through control planes"
+  type = object({
+    allowed_roles                 = list(string)
+    allowed_kubernetes_namespaces = list(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.kubernetes_talos_api_access == null || try(length(var.kubernetes_talos_api_access.allowed_roles) > 0 && length(var.kubernetes_talos_api_access.allowed_kubernetes_namespaces) > 0, false)
+    error_message = "kubernetes_talos_api_access needs at least one role and one namespace: without either, no pod gets access."
+  }
+}
+
+variable "etcd_listen_metrics_urls" {
+  description = "URLs etcd serves `/metrics` and `/health` on without client certificates (`cluster.etcd.extraArgs.listen-metrics-urls`), for Prometheus to scrape. The default listens on all addresses, IPv6 included. `[]` leaves it to etcd, which then serves metrics on its client port with certificates only. Only applied through control planes"
+  type        = list(string)
+  default     = ["http://[::]:2381"]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for url in var.etcd_listen_metrics_urls : can(regex("^https?://[^/,\\s]+:[0-9]+$", url))])
+    error_message = "etcd_listen_metrics_urls must be URLs of the form http://<address>:<port>, with an IPv6 address in brackets: http://[::]:2381."
+  }
+}
+
+variable "controller_manager_bind_address" {
+  description = "Address kube-controller-manager serves `/metrics` and its health endpoints on, over HTTPS on port 10257 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
+  type        = string
+  default     = "::"
+
+  # coalesce: OpenTofu before 1.9 evaluates both sides of `||`, and contains fails on null
+  validation {
+    condition     = contains(["::", "0.0.0.0"], coalesce(var.controller_manager_bind_address, "::"))
+    error_message = "controller_manager_bind_address must be `::`, `0.0.0.0` or null: Talos probes kube-controller-manager on localhost, so it cannot bind to one address of the node."
+  }
+}
+
+variable "scheduler_bind_address" {
+  description = "Address kube-scheduler serves `/metrics` and its health endpoints on, over HTTPS on port 10259 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes"
+  type        = string
+  default     = "::"
+
+  validation {
+    condition     = contains(["::", "0.0.0.0"], coalesce(var.scheduler_bind_address, "::"))
+    error_message = "scheduler_bind_address must be `::`, `0.0.0.0` or null: Talos probes kube-scheduler on localhost, so it cannot bind to one address of the node."
+  }
+}
+
 variable "oidc" {
   description = "OIDC for kube-apiserver. Null leaves OIDC off. Tokens are accepted for `client_id` and for each of `audiences`. Set `groups_claim` to `\"\"` to give the users no groups, and a prefix to `\"\"` for no prefix. `groups_prefix` is also put in front of the group in the cluster-admin binding, which `cluster_admin_binding = false` leaves out"
   type = object({

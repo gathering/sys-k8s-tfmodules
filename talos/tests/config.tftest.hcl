@@ -445,6 +445,234 @@ run "oidc_without_groups_prefix" {
   }
 }
 
+run "kubernetes_talos_api_access" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets       = run.setup.machine_secrets
+    talos_client_configuration  = run.setup.client_configuration
+    type                        = "controlplane"
+    kubernetes_talos_api_access = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = ["talos-backup"] }
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.features.kubernetesTalosAPIAccess == { enabled = true, allowedRoles = ["os:etcd:backup"], allowedKubernetesNamespaces = ["talos-backup"] }
+    error_message = "Expected Talos API access for the role and the namespace."
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.certSANs == ["localhost", "2001:db8::1"] && yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.features.diskQuotaSupport == true
+    error_message = "The patch must leave the rest of the machine document alone, the other features included."
+  }
+}
+
+run "kubernetes_talos_api_access_needs_a_role" {
+  command = plan
+
+  variables {
+    talos_machine_secrets       = run.setup.machine_secrets
+    talos_client_configuration  = run.setup.client_configuration
+    type                        = "controlplane"
+    kubernetes_talos_api_access = { allowed_roles = [], allowed_kubernetes_namespaces = ["talos-backup"] }
+  }
+
+  expect_failures = [var.kubernetes_talos_api_access]
+}
+
+run "kubernetes_talos_api_access_needs_a_namespace" {
+  command = plan
+
+  variables {
+    talos_machine_secrets       = run.setup.machine_secrets
+    talos_client_configuration  = run.setup.client_configuration
+    type                        = "controlplane"
+    kubernetes_talos_api_access = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = [] }
+  }
+
+  expect_failures = [var.kubernetes_talos_api_access]
+}
+
+run "etcd_metrics_listen_on_ipv6_by_default" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.extraArgs == { "listen-metrics-urls" = "http://[::]:2381" }
+    error_message = "By default etcd must serve metrics on the IPv6 wildcard address, port 2381."
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.ca.crt != ""
+    error_message = "The patch must leave the rest of the etcd section alone."
+  }
+}
+
+run "etcd_listen_metrics_urls" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    etcd_listen_metrics_urls   = ["http://[::1]:2381", "http://[2001:db8:0:1::abcd]:2381"]
+  }
+
+  assert {
+    condition     = yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.extraArgs == { "listen-metrics-urls" = "http://[::1]:2381,http://[2001:db8:0:1::abcd]:2381" }
+    error_message = "Expected the URLs given, joined with a comma."
+  }
+}
+
+run "etcd_listen_metrics_urls_off" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    etcd_listen_metrics_urls   = []
+  }
+
+  assert {
+    condition     = !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd.extraArgs)
+    error_message = "Without URLs the etcd arguments must be left to Talos."
+  }
+}
+
+run "etcd_listen_metrics_urls_must_be_urls" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    etcd_listen_metrics_urls   = ["[::]:2381"]
+  }
+
+  expect_failures = [var.etcd_listen_metrics_urls]
+}
+
+run "bind_addresses_are_ipv6_by_default" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].extraArgs == { "bind-address" = "::" } && [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeSchedulerConfig\n")][0].extraArgs == { "bind-address" = "::" }
+    error_message = "By default kube-controller-manager and kube-scheduler must bind to the IPv6 wildcard address."
+  }
+
+  assert {
+    condition     = startswith([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].image, "registry.k8s.io/kube-controller-manager:") && startswith([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeSchedulerConfig\n")][0].image, "registry.k8s.io/kube-scheduler:")
+    error_message = "The patches must leave the rest of both documents alone."
+  }
+}
+
+run "bind_addresses" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+  }
+
+  variables {
+    talos_machine_secrets           = run.setup.machine_secrets
+    talos_client_configuration      = run.setup.client_configuration
+    type                            = "controlplane"
+    controller_manager_bind_address = "0.0.0.0"
+    scheduler_bind_address          = null
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeControllerManagerConfig\n")][0].extraArgs == { "bind-address" = "0.0.0.0" }
+    error_message = "Expected kube-controller-manager to bind to the address given."
+  }
+
+  assert {
+    condition     = !can([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeSchedulerConfig\n")][0].extraArgs)
+    error_message = "With null the kube-scheduler arguments must be left to Talos."
+  }
+}
+
+run "bind_address_must_be_a_wildcard" {
+  command = plan
+
+  variables {
+    talos_machine_secrets           = run.setup.machine_secrets
+    talos_client_configuration      = run.setup.client_configuration
+    type                            = "controlplane"
+    controller_manager_bind_address = "[::]"
+    scheduler_bind_address          = "2001:db8:0:1::abcd"
+  }
+
+  expect_failures = [var.controller_manager_bind_address, var.scheduler_bind_address]
+}
+
 run "worker" {
   override_resource {
     target = talos_machine_bootstrap.this
@@ -465,6 +693,7 @@ run "worker" {
     node_keys                          = ["a", "b"]
     oidc                               = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes" }
     allow_scheduling_on_control_planes = true
+    kubernetes_talos_api_access        = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = ["talos-backup"] }
   }
 
   assert {
@@ -478,13 +707,23 @@ run "worker" {
   }
 
   assert {
-    condition     = [for kind in ["KubeAPIServerConfig", "KubeAuthenticationConfig", "KubeInlineManifestConfig", "KubeProxyConfig", "KubeFlannelCNIConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 0, 0, 0]
+    condition     = !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).cluster.etcd)
+    error_message = "Workers must not get the etcd metrics URLs: Talos rejects etcd config on a worker."
+  }
+
+  assert {
+    condition     = [for kind in ["KubeAPIServerConfig", "KubeAuthenticationConfig", "KubeInlineManifestConfig", "KubeProxyConfig", "KubeFlannelCNIConfig", "KubeControllerManagerConfig", "KubeSchedulerConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 0, 0, 0, 0, 0]
     error_message = "Workers must not get what only control planes act on."
   }
 
   assert {
     condition     = alltrue([for patch in output.config_patches : !strcontains(patch, "oidc") && !strcontains(patch, "extra") && !strcontains(patch, "KubeNodeConfig")])
     error_message = "OIDC settings, talos_inline_manifests and the scheduling setting must only reach control planes."
+  }
+
+  assert {
+    condition     = alltrue([for patch in output.config_patches : !strcontains(patch, "kubernetesTalosAPIAccess")]) && try(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.features.kubernetesTalosAPIAccess, null) == null
+    error_message = "Talos API access from Kubernetes must only reach control planes: Talos rejects it on a worker."
   }
 
   assert {

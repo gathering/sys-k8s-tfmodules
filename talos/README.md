@@ -19,7 +19,7 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.3.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.4.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -138,13 +138,48 @@ With OIDC on, the control planes also get a `ClusterRoleBinding` that makes the 
 
 Talos creates the objects of an inline manifest when they are missing and leaves existing ones alone. After changing `groups_prefix` or turning OIDC off on a running cluster, delete the old binding yourself: `kubectl delete clusterrolebinding oidc-<cluster_name>-cluster-admin`. The same goes for `talos_inline_manifests`.
 
+## Talos API access from Kubernetes
+
+`kubernetes_talos_api_access` lets pods reach the Talos API, for a job that backs up etcd for example. It is off by default.
+
+```hcl
+kubernetes_talos_api_access = {
+  allowed_roles                 = ["os:etcd:backup"]
+  allowed_kubernetes_namespaces = ["talos-backup"]
+}
+```
+
+Set it on the control-plane pool: Talos accepts the setting on control planes only, and the module leaves it out of a worker config. Whoever can create a `ServiceAccount` of `talos.dev` in one of the namespaces gets credentials for any of the roles, so name a namespace of its own and no more roles than the workload needs.
+
+## Control plane metrics
+
+The control planes serve the metrics of etcd, kube-controller-manager and kube-scheduler on every address of the node, for Prometheus to scrape. The defaults are the IPv6 wildcard address:
+
+```hcl
+etcd_listen_metrics_urls        = ["http://[::]:2381"]
+controller_manager_bind_address = "::"
+scheduler_bind_address          = "::"
+```
+
+| Component | Port | Access |
+|---|---|---|
+| etcd | 2381, HTTP | no client certificate: anyone who reaches the port can read `/metrics` and `/health` |
+| kube-controller-manager | 10257, HTTPS | `/metrics` needs a token that the Kubernetes API accepts for it |
+| kube-scheduler | 10259, HTTPS | the same |
+
+Limit the ports in the firewall. For etcd, the URLs can also name the addresses to listen on, and `etcd_listen_metrics_urls = []` turns the port off: etcd then serves metrics on its client port only, with a client certificate. A bind address is `::`, `0.0.0.0` for IPv4 only, or `null`, which leaves it to Talos: 127.0.0.1. It cannot be one address of the node, because Talos probes both components on `localhost`.
+
+kube-controller-manager and kube-scheduler restart when the config is applied. etcd reads its arguments when it starts, so on a running cluster its port may only open after a reboot of the control plane; this was not tried.
+
 ## Machine config patches
 
-The config is the one Talos generates for `talos_version`, with one patch per configuration document on top:
+The config is the one Talos generates for `talos_version`, with one patch per configuration document on top, and more for the v1alpha1 document on control planes:
 
 | Document | Nodes | What the module sets |
 |---|---|---|
 | `machine` (v1alpha1) | all | `certSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
+| `machine` (v1alpha1) | control planes | `features.kubernetesTalosAPIAccess`, with `kubernetes_talos_api_access` |
+| `cluster` (v1alpha1) | control planes | `etcd.extraArgs.listen-metrics-urls`: `etcd_listen_metrics_urls` |
 | `ResolverConfig` | all | `nameservers` |
 | `TimeSyncConfig` | all | `time_servers` |
 | `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
@@ -152,6 +187,8 @@ The config is the one Talos generates for `talos_version`, with one patch per co
 | `KubeAPIServerConfig` | control planes | `certExtraSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
 | `KubeProxyConfig`, `KubeFlannelCNIConfig` | control planes | removed: the cluster brings its own CNI |
 | `KubeNodeConfig` | control planes | with `allow_scheduling_on_control_planes`: no `NoSchedule` taint and no `exclude-from-external-load-balancers` label |
+| `KubeControllerManagerConfig` | control planes | `extraArgs.bind-address`: `controller_manager_bind_address` |
+| `KubeSchedulerConfig` | control planes | `extraArgs.bind-address`: `scheduler_bind_address` |
 | `KubeAuthenticationConfig` | control planes | OIDC, with `oidc` |
 | `KubeInlineManifestConfig` | control planes | the OIDC binding, then `talos_inline_manifests` |
 
@@ -218,6 +255,7 @@ No modules.
 | <a name="input_apply_mode"></a> [apply\_mode](#input\_apply\_mode) | How config changes are applied to existing nodes: `auto`, `reboot`, `no_reboot`, `staged` or `staged_if_needing_reboot`. The default stages a change that needs a reboot instead of rebooting the node, see the README | `string` | `"staged_if_needing_reboot"` | no |
 | <a name="input_cluster_ip"></a> [cluster\_ip](#input\_cluster\_ip) | IPv6 LB IP to cluster | `string` | n/a | yes |
 | <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Cluster Name | `string` | n/a | yes |
+| <a name="input_controller_manager_bind_address"></a> [controller\_manager\_bind\_address](#input\_controller\_manager\_bind\_address) | Address kube-controller-manager serves `/metrics` and its health endpoints on, over HTTPS on port 10257 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes | `string` | `"::"` | no |
 | <a name="input_cores"></a> [cores](#input\_cores) | Number of CPU Cores per node | `number` | `2` | no |
 | <a name="input_cpu_type"></a> [cpu\_type](#input\_cpu\_type) | Proxmox CPU Type | `string` | `"Skylake-Server-noTSX-IBRS"` | no |
 | <a name="input_datastore"></a> [datastore](#input\_datastore) | Proxmox Datastore | `string` | `"ceph1"` | no |
@@ -227,8 +265,10 @@ No modules.
 | <a name="input_discovery_service_endpoint"></a> [discovery\_service\_endpoint](#input\_discovery\_service\_endpoint) | Discovery Service Endpoint | `string` | `"https://discovery.talos.dev:443"` | no |
 | <a name="input_disk"></a> [disk](#input\_disk) | Disk size (OS) per node (GB) | `number` | `24` | no |
 | <a name="input_domain_name"></a> [domain\_name](#input\_domain\_name) | DNS domain of the nodes: the search domain of the VMs, and the domain of each node's DNS name in Netbox (`<node_prefix><key>.<domain_name>`) | `string` | `"gathering.systems"` | no |
+| <a name="input_etcd_listen_metrics_urls"></a> [etcd\_listen\_metrics\_urls](#input\_etcd\_listen\_metrics\_urls) | URLs etcd serves `/metrics` and `/health` on without client certificates (`cluster.etcd.extraArgs.listen-metrics-urls`), for Prometheus to scrape. The default listens on all addresses, IPv6 included. `[]` leaves it to etcd, which then serves metrics on its client port with certificates only. Only applied through control planes | `list(string)` | <pre>[<br/>  "http://[::]:2381"<br/>]</pre> | no |
 | <a name="input_extra_cert_sans"></a> [extra\_cert\_sans](#input\_extra\_cert\_sans) | More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example | `list(string)` | `[]` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
+| <a name="input_kubernetes_talos_api_access"></a> [kubernetes\_talos\_api\_access](#input\_kubernetes\_talos\_api\_access) | Let pods in `allowed_kubernetes_namespaces` reach the Talos API with `allowed_roles`, `os:etcd:backup` for an etcd backup job for example. `null` leaves it off. Only applied through control planes | <pre>object({<br/>    allowed_roles                 = list(string)<br/>    allowed_kubernetes_namespaces = list(string)<br/>  })</pre> | `null` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version | `string` | `"v1.35.5"` | no |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |
 | <a name="input_nameservers"></a> [nameservers](#input\_nameservers) | DNS Servers. Use DNS64 if this is a IPv6 only cluster | `list(string)` | <pre>[<br/>  "2606:4700:4700::64"<br/>]</pre> | no |
@@ -247,6 +287,7 @@ No modules.
 | <a name="input_pod_subnets"></a> [pod\_subnets](#input\_pod\_subnets) | k8s pod subnets in CIDR notation, at least one | `list(string)` | n/a | yes |
 | <a name="input_proxmox_nodes"></a> [proxmox\_nodes](#input\_proxmox\_nodes) | Proxmox hosts to use, in placement order: the snippet is uploaded to each and node N of `node_keys` is created on host N, wrapping around. Defaults to every host the API returns, in API order | `list(string)` | `null` | no |
 | <a name="input_proxmox_online_only"></a> [proxmox\_online\_only](#input\_proxmox\_online\_only) | Create new VMs on online hosts only. The snippet still goes to every host. Ignored when `proxmox_nodes` is set | `bool` | `false` | no |
+| <a name="input_scheduler_bind_address"></a> [scheduler\_bind\_address](#input\_scheduler\_bind\_address) | Address kube-scheduler serves `/metrics` and its health endpoints on, over HTTPS on port 10259 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes | `string` | `"::"` | no |
 | <a name="input_service_subnets"></a> [service\_subnets](#input\_service\_subnets) | k8s service subnets in CIDR notation, at least one | `list(string)` | n/a | yes |
 | <a name="input_snippet_datastore"></a> [snippet\_datastore](#input\_snippet\_datastore) | Proxmox datastore the machine config snippet is uploaded to on every host. Must allow the `snippets` content type | `string` | `"local"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Proxmox VM tags | `list(string)` | <pre>[<br/>  "kubernetes",<br/>  "terraform"<br/>]</pre> | no |
