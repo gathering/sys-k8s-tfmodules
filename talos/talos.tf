@@ -42,16 +42,24 @@ EOT
   # takes the generated one out. The v1alpha1 document gets more patches on control
   # planes, for what workers must not get.
 
+  # Only when set: a patch that is always there would re-apply the config on every node
+  kubelet_config_patches = var.kubelet_max_pods != null ? [
+    yamlencode({ apiVersion = "v1alpha1", kind = "KubeletConfig", config = { maxPods = var.kubelet_max_pods } }),
+  ] : []
+
   # What every node gets
-  node_config_patches = [
-    yamlencode({ machine = { certSANs = local.cert_sans } }),
-    yamlencode({ apiVersion = "v1alpha1", kind = "ResolverConfig", nameservers = [for address in var.nameservers : { address = address }] }),
-    yamlencode({ apiVersion = "v1alpha1", kind = "TimeSyncConfig", ntp = { servers = var.time_servers } }),
-    yamlencode({ apiVersion = "v1alpha1", kind = "KubeNetworkConfig", podSubnets = var.pod_subnets, serviceSubnets = var.service_subnets }),
-    var.discovery_enabled
-    ? yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", endpoint = var.discovery_service_endpoint })
-    : yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", "$patch" = "delete" }),
-  ]
+  node_config_patches = concat(
+    [
+      yamlencode({ machine = { certSANs = local.cert_sans } }),
+      yamlencode({ apiVersion = "v1alpha1", kind = "ResolverConfig", nameservers = [for address in var.nameservers : { address = address }] }),
+      yamlencode({ apiVersion = "v1alpha1", kind = "TimeSyncConfig", ntp = { servers = var.time_servers } }),
+      yamlencode({ apiVersion = "v1alpha1", kind = "KubeNetworkConfig", podSubnets = var.pod_subnets, serviceSubnets = var.service_subnets }),
+      var.discovery_enabled
+      ? yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", endpoint = var.discovery_service_endpoint })
+      : yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", "$patch" = "delete" }),
+    ],
+    local.kubelet_config_patches,
+  )
 
   # Talos generates the node document of a control plane with the NoSchedule taint and a
   # label that keeps the node out of load balancers. A patch cannot take one label out,
@@ -127,6 +135,19 @@ EOT
     ],
   )
 
+  # Null when there is nothing to compare with: the check is skipped, or a worker pool was
+  # not given the version
+  running_kubernetes_version = (
+    var.skip_kubernetes_version_check ? null
+    : local.bootstrap ? try(jsondecode(data.http.kubernetes_version[0].response_body).gitVersion, null)
+    : var.running_kubernetes_version
+  )
+
+  # Checked by the config apply: a read that failed has no version to compare
+  kubernetes_version_read_status = (
+    local.bootstrap && !var.skip_kubernetes_version_check ? data.http.kubernetes_version[0].status_code : null
+  )
+
   worker_config_patches = local.node_config_patches
   config_patches        = var.type == "controlplane" ? local.controlplane_config_patches : local.worker_config_patches
 }
@@ -168,6 +189,34 @@ resource "talos_machine_bootstrap" "this" {
   ]
 }
 
+# The version the cluster runs, from the API. The module never moves it: Kubernetes is
+# upgraded with `talosctl upgrade-k8s`, and the config apply below refuses a config that is
+# built for another version. On a new cluster the kubeconfig is unknown until bootstrap, so
+# this is read during the apply, after the bootstrap; the retries wait up to about 10
+# minutes for the API to come up. A plan while the API is down waits as long before the
+# config apply refuses it.
+# Read from the first node, like the kubeconfig: Talos puts the node addresses in the API
+# server certificate, and the VIP comes from outside the module, so a plan that targets
+# the module would not have it on a new cluster.
+# No postcondition: with one, the read is put off to the apply whenever something it
+# references has a change pending, and so is the check. The config apply checks the status.
+# Not on the config data source: the config must not wait for the cluster
+data "http" "kubernetes_version" {
+  count = local.bootstrap && !var.skip_kubernetes_version_check ? 1 : 0
+
+  url                = "https://[${local.node_ips[0]}]:${local.kube_apiserver_port}/version"
+  ca_cert_pem        = base64decode(talos_cluster_kubeconfig.this[0].kubernetes_client_configuration.ca_certificate)
+  client_cert_pem    = base64decode(talos_cluster_kubeconfig.this[0].kubernetes_client_configuration.client_certificate)
+  client_key_pem     = base64decode(talos_cluster_kubeconfig.this[0].kubernetes_client_configuration.client_key)
+  request_timeout_ms = 5000
+
+  retry {
+    attempts     = 60
+    min_delay_ms = 5000
+    max_delay_ms = 5000
+  }
+}
+
 resource "talos_machine_configuration_apply" "this" {
   for_each = toset(var.node_keys)
 
@@ -182,6 +231,19 @@ resource "talos_machine_configuration_apply" "this" {
     graceful = var.on_destroy.graceful
     reset    = var.on_destroy.reset
     reboot   = var.on_destroy.reboot
+  }
+
+  lifecycle {
+    # Ternaries, not ||: OpenTofu 1.8 evaluates both sides of ||
+    precondition {
+      condition     = local.kubernetes_version_read_status == null ? true : local.kubernetes_version_read_status == 200
+      error_message = "Reading the Kubernetes version from ${try(data.http.kubernetes_version[0].url, "-")} returned HTTP ${coalesce(local.kubernetes_version_read_status, 0)}. Set skip_kubernetes_version_check = true to apply without the check."
+    }
+
+    precondition {
+      condition     = local.running_kubernetes_version == null ? true : trimprefix(local.running_kubernetes_version, "v") == trimprefix(var.kubernetes_version, "v")
+      error_message = "kubernetes_version is ${var.kubernetes_version}, but the cluster runs ${coalesce(local.running_kubernetes_version, "-")}. The module does not upgrade Kubernetes: upgrade with `talosctl upgrade-k8s`, one minor version at a time, then set kubernetes_version to the version the cluster runs."
+    }
   }
 
   # Every VM must exist and, for control planes, etcd must be bootstrapped before config is applied

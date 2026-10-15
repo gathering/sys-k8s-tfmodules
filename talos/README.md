@@ -11,15 +11,16 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 - The machine running OpenTofu needs direct access to the node addresses on tcp/50000. Bootstrap, config apply and the kubeconfig go to a node IP, not through the load balancer
 - Worker pools join through the cluster endpoint. Their config apply retries until the control plane answers; to order it explicitly, apply the control-plane module first (`-target=module.controlplane`). Do not put a module-level `depends_on` on this module, see [below](#module-level-depends_on)
 - Talos 1.14 or later on the nodes, in the template included
+- The machine running OpenTofu needs access to the Kubernetes API on the first control-plane node (tcp/6443): a control-plane pool reads the version the cluster runs from it, see [Kubernetes version](#kubernetes-version)
 - The module leaves out the CNI and kube-proxy. Install a CNI with kube-proxy replacement after bootstrap; nodes stay `NotReady` until then
 
-`talos_version` is the version contract the machine config is generated for, `v1.14.2` by default and v1.14 at the least: the config is built from the configuration documents Talos 1.14 introduced. It does not install or upgrade Talos; upgrades happen outside this module. The nodes must run at least that version. `kubernetes_version` defaults to `v1.35.5`.
+`talos_version` is the version contract the machine config is generated for, `v1.14.2` by default and v1.14 at the least: the config is built from the configuration documents Talos 1.14 introduced. It does not install or upgrade Talos; upgrades happen outside this module. The nodes must run at least that version. `kubernetes_version` defaults to `v1.37.1` and must be the version the cluster runs, see [Kubernetes version](#kubernetes-version).
 
 ## Usage
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.4.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.5.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -96,6 +97,25 @@ Read the plan warnings before applying:
 The apply itself, not only the plan, contacts nodes on tcp/50000. When a config apply is updated for any reason, the provider sends the config to that node again, also when the config itself is unchanged, and retries for up to 10 minutes (read in the provider source, not tested). One node being down therefore fails the apply.
 
 Config applies of one pool run in parallel. For a change that touches the control planes, apply with `-parallelism=1` and, in a cluster with several pools, the control-plane module first (`-target=module.controlplane`). Changes outside that module then show up in the second, untargeted apply, which is expected. A new node boots with the config from the snippet, so its first config apply changes nothing whatever the mode.
+
+## Kubernetes version
+
+The module never changes the Kubernetes version of a running cluster. `kubernetes_version` sets the images in the machine config, and a config apply would replace them without stepping through the minor versions in between, without checking for removed APIs and without updating CoreDNS. So an operator upgrades with `talosctl`, one minor version at a time, and OpenTofu follows:
+
+```sh
+talosctl -n <control plane> upgrade-k8s --to <version> --dry-run
+talosctl -n <control plane> upgrade-k8s --to <version>
+```
+
+Then set `kubernetes_version` to the version the cluster runs. The config then matches the cluster: nothing is re-applied for the version.
+
+A control-plane pool reads the version the cluster runs from `/version` on its first node, with the client certificate of the kubeconfig, and its config apply refuses to run when `kubernetes_version` differs. On a running cluster the version is read during the plan, so the plan fails. When the kubeconfig itself has a change pending, such as a renewal of its certificate, the read waits for the apply: the apply then fails before any node gets the config, but after the snippet files are uploaded. The node address, not the VIP: the VIP is created outside the module, so on a new cluster an apply with `-target=module.controlplane` would not have it. A worker pool has no kubeconfig: give it the control-plane pool's `running_kubernetes_version` output. Leave the worker input null and its pool is not checked.
+
+- New cluster: the kubeconfig is unknown until the bootstrap, so the version is read during the apply, after it. The read retries for about 5 minutes, and up to 10 when the address does not answer, while the API comes up. It then finds the version the module just installed: a new cluster needs nothing more.
+- API down: the read retries for 5 to 10 minutes and the plan fails. To plan anyway, set `skip_kubernetes_version_check = true`, and set it back to false afterwards. While it is set, the config is applied with `kubernetes_version`, whatever the cluster runs.
+- During an upgrade, the control planes run different versions and the read depends on which one answers. Do not apply until `upgrade-k8s` is done.
+
+`talos_version` is no upgrade either: it is the format of the config, and the nodes are upgraded with `talosctl upgrade`, see above.
 
 ## Removing nodes
 
@@ -183,6 +203,7 @@ The config is the one Talos generates for `talos_version`, with one patch per co
 | `ResolverConfig` | all | `nameservers` |
 | `TimeSyncConfig` | all | `time_servers` |
 | `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
+| `KubeletConfig` | all | `config.maxPods`, with `kubelet_max_pods` |
 | `DiscoveryServiceConfig` | all | `discovery_service_endpoint`, or removed with `discovery_enabled = false` |
 | `KubeAPIServerConfig` | control planes | `certExtraSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
 | `KubeProxyConfig`, `KubeFlannelCNIConfig` | control planes | removed: the cluster brings its own CNI |
@@ -202,7 +223,7 @@ Everything else is also what Talos generates. The `config_patches` output is the
 
 ## Tests
 
-`tofu test` in this directory runs the tests in [`tests`](./tests). Netbox and Proxmox are mocked, so no credentials are needed; the Talos provider renders the machine config locally. The mocks cannot show whether a plan leaves a resource alone, only which resources exist and how they are configured.
+`tofu test` in this directory runs the tests in [`tests`](./tests). Netbox and Proxmox are mocked, so no credentials are needed; the Talos provider renders the machine config locally. The provider renders a config without validating it, so the tests also hand the rendered configs to `talosctl validate`: `talosctl` must be on the `PATH`. The mocks cannot show whether a plan leaves a resource alone, only which resources exist and how they are configured.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -210,6 +231,7 @@ Everything else is also what Talos generates. The `config_patches` output is the
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.8 |
+| <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.6 |
 | <a name="requirement_netbox"></a> [netbox](#requirement\_netbox) | ~> 5.8 |
 | <a name="requirement_proxmox"></a> [proxmox](#requirement\_proxmox) | ~> 0.116.0 |
 | <a name="requirement_talos"></a> [talos](#requirement\_talos) | ~> 0.12.0 |
@@ -218,6 +240,7 @@ Everything else is also what Talos generates. The `config_patches` output is the
 
 | Name | Version |
 | ---- | ------- |
+| <a name="provider_http"></a> [http](#provider\_http) | ~> 3.6 |
 | <a name="provider_netbox"></a> [netbox](#provider\_netbox) | ~> 5.8 |
 | <a name="provider_proxmox"></a> [proxmox](#provider\_proxmox) | ~> 0.116.0 |
 | <a name="provider_talos"></a> [talos](#provider\_talos) | ~> 0.12.0 |
@@ -239,6 +262,7 @@ No modules.
 | [talos_cluster_kubeconfig.this](https://registry.terraform.io/providers/siderolabs/talos/latest/docs/resources/cluster_kubeconfig) | resource |
 | [talos_machine_bootstrap.this](https://registry.terraform.io/providers/siderolabs/talos/latest/docs/resources/machine_bootstrap) | resource |
 | [talos_machine_configuration_apply.this](https://registry.terraform.io/providers/siderolabs/talos/latest/docs/resources/machine_configuration_apply) | resource |
+| [http_http.kubernetes_version](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
 | [netbox_cluster.this](https://registry.terraform.io/providers/e-breuninger/netbox/latest/docs/data-sources/cluster) | data source |
 | [netbox_device_role.this](https://registry.terraform.io/providers/e-breuninger/netbox/latest/docs/data-sources/device_role) | data source |
 | [netbox_prefix.node](https://registry.terraform.io/providers/e-breuninger/netbox/latest/docs/data-sources/prefix) | data source |
@@ -268,8 +292,9 @@ No modules.
 | <a name="input_etcd_listen_metrics_urls"></a> [etcd\_listen\_metrics\_urls](#input\_etcd\_listen\_metrics\_urls) | URLs etcd serves `/metrics` and `/health` on without client certificates (`cluster.etcd.extraArgs.listen-metrics-urls`), for Prometheus to scrape. The default listens on all addresses, IPv6 included. `[]` leaves it to etcd, which then serves metrics on its client port with certificates only. Only applied through control planes | `list(string)` | <pre>[<br/>  "http://[::]:2381"<br/>]</pre> | no |
 | <a name="input_extra_cert_sans"></a> [extra\_cert\_sans](#input\_extra\_cert\_sans) | More names and addresses for the certificates of the Kubernetes API and the Talos API, next to `localhost` and `cluster_ip`: the DNS name of the API load balancer, for example | `list(string)` | `[]` | no |
 | <a name="input_gateway"></a> [gateway](#input\_gateway) | IPv6 default gateway of the nodes. Defaults to host 1 of `netbox_node_prefix` | `string` | `null` | no |
+| <a name="input_kubelet_max_pods"></a> [kubelet\_max\_pods](#input\_kubelet\_max\_pods) | Most pods the kubelet runs on a node (`config.maxPods` of the `KubeletConfig` document). `null` leaves it to the kubelet: 110 | `number` | `null` | no |
 | <a name="input_kubernetes_talos_api_access"></a> [kubernetes\_talos\_api\_access](#input\_kubernetes\_talos\_api\_access) | Let pods in `allowed_kubernetes_namespaces` reach the Talos API with `allowed_roles`, `os:etcd:backup` for an etcd backup job for example. `null` leaves it off. Only applied through control planes | <pre>object({<br/>    allowed_roles                 = list(string)<br/>    allowed_kubernetes_namespaces = list(string)<br/>  })</pre> | `null` | no |
-| <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version | `string` | `"v1.35.5"` | no |
+| <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version the machine config is built with. It must be the version the cluster runs: the module does not upgrade Kubernetes, and a config apply refuses to run when they differ. Upgrade with `talosctl upgrade-k8s`, then set this to the new version | `string` | `"v1.37.1"` | no |
 | <a name="input_memory"></a> [memory](#input\_memory) | Memory size per node (MB) | `number` | `4096` | no |
 | <a name="input_nameservers"></a> [nameservers](#input\_nameservers) | DNS Servers. Use DNS64 if this is a IPv6 only cluster | `list(string)` | <pre>[<br/>  "2606:4700:4700::64"<br/>]</pre> | no |
 | <a name="input_netbox_cluster_name"></a> [netbox\_cluster\_name](#input\_netbox\_cluster\_name) | Name of the Netbox cluster the VMs are registered in | `string` | `"pve"` | no |
@@ -287,8 +312,10 @@ No modules.
 | <a name="input_pod_subnets"></a> [pod\_subnets](#input\_pod\_subnets) | k8s pod subnets in CIDR notation, at least one | `list(string)` | n/a | yes |
 | <a name="input_proxmox_nodes"></a> [proxmox\_nodes](#input\_proxmox\_nodes) | Proxmox hosts to use, in placement order: the snippet is uploaded to each and node N of `node_keys` is created on host N, wrapping around. Defaults to every host the API returns, in API order | `list(string)` | `null` | no |
 | <a name="input_proxmox_online_only"></a> [proxmox\_online\_only](#input\_proxmox\_online\_only) | Create new VMs on online hosts only. The snippet still goes to every host. Ignored when `proxmox_nodes` is set | `bool` | `false` | no |
+| <a name="input_running_kubernetes_version"></a> [running\_kubernetes\_version](#input\_running\_kubernetes\_version) | For a worker pool: the Kubernetes version the cluster runs, the `running_kubernetes_version` output of the control-plane pool. The config apply refuses to run when it differs from `kubernetes_version`. Null skips the check. A control-plane pool reads the version itself | `string` | `null` | no |
 | <a name="input_scheduler_bind_address"></a> [scheduler\_bind\_address](#input\_scheduler\_bind\_address) | Address kube-scheduler serves `/metrics` and its health endpoints on, over HTTPS on port 10259 (`bind-address`), for Prometheus to scrape. The default `::` is every address, IPv6 included; `0.0.0.0` is every IPv4 address. `null` leaves it to Talos, which binds to 127.0.0.1. Only applied through control planes | `string` | `"::"` | no |
 | <a name="input_service_subnets"></a> [service\_subnets](#input\_service\_subnets) | k8s service subnets in CIDR notation, at least one | `list(string)` | n/a | yes |
+| <a name="input_skip_kubernetes_version_check"></a> [skip\_kubernetes\_version\_check](#input\_skip\_kubernetes\_version\_check) | Do not read the Kubernetes version from the cluster, and apply the config without comparing it to `kubernetes_version`. For when the API cannot be reached; set it back to false afterwards | `bool` | `false` | no |
 | <a name="input_snippet_datastore"></a> [snippet\_datastore](#input\_snippet\_datastore) | Proxmox datastore the machine config snippet is uploaded to on every host. Must allow the `snippets` content type | `string` | `"local"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Proxmox VM tags | `list(string)` | <pre>[<br/>  "kubernetes",<br/>  "terraform"<br/>]</pre> | no |
 | <a name="input_talos_client_configuration"></a> [talos\_client\_configuration](#input\_talos\_client\_configuration) | Talos client configuration, the `client_configuration` attribute of a `talos_machine_secrets` resource | <pre>object({<br/>    ca_certificate     = string<br/>    client_certificate = string<br/>    client_key         = string<br/>  })</pre> | n/a | yes |
@@ -310,5 +337,6 @@ No modules.
 | <a name="output_kubeconfig"></a> [kubeconfig](#output\_kubeconfig) | Kubeconfig. Output only on type controlplane |
 | <a name="output_machine_configuration"></a> [machine\_configuration](#output\_machine\_configuration) | Rendered machine config of the pool, as uploaded in the snippet. Holds the cluster secrets |
 | <a name="output_nodes_by_key"></a> [nodes\_by\_key](#output\_nodes\_by\_key) | Nodes as a map from node key to an object with `name` and `ip`. The keys and names are known at plan time |
+| <a name="output_running_kubernetes_version"></a> [running\_kubernetes\_version](#output\_running\_kubernetes\_version) | Kubernetes version the cluster runs, read from the API by a control-plane pool. Pass it to the worker pools as `running_kubernetes_version`. Null when the check is skipped |
 | <a name="output_talosconfig"></a> [talosconfig](#output\_talosconfig) | Talosctl config. Output only on type controlplane |
 <!-- END_TF_DOCS -->
