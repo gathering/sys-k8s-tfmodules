@@ -3,7 +3,7 @@
 #
 # The module sources are relative so that CI validates this example against the modules of
 # the same commit. In your own root module, pin a release instead:
-#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.4.0"
+#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.5.0"
 
 # Endpoints and credentials come from the providers' environment variables
 provider "netbox" {}
@@ -61,6 +61,7 @@ module "workers" {
   cluster_ip                 = var.cluster_ip
   talos_version              = var.talos_version
   kubernetes_version         = var.kubernetes_version
+  running_kubernetes_version = module.controlplane.running_kubernetes_version
   talos_machine_secrets      = talos_machine_secrets.this.machine_secrets
   talos_client_configuration = talos_machine_secrets.this.client_configuration
   pod_subnets                = var.pod_subnets

@@ -31,7 +31,7 @@ variable "talos_version" {
 variable "kubernetes_version" {
   description = "Kubernetes version"
   type        = string
-  default     = "v1.35.5"
+  default     = "v1.37.1"
 }
 
 variable "netbox_vlan_group_name" {

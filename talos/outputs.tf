@@ -37,3 +37,8 @@ output "machine_configuration" {
   sensitive   = true
   value       = data.talos_machine_configuration.this.machine_configuration
 }
+
+output "running_kubernetes_version" {
+  description = "Kubernetes version the cluster runs, read from the API by a control-plane pool. Pass it to the worker pools as `running_kubernetes_version`. Null when the check is skipped"
+  value       = local.running_kubernetes_version
+}

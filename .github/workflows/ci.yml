@@ -17,6 +17,10 @@ env:
   TFLINT_VERSION: v0.64.0
   TERRAFORM_DOCS_VERSION: v0.24.0
   TERRAFORM_DOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+  # The talos tests run `talosctl validate` on the rendered configs. Keep it on the Talos
+  # release of the talos_version default
+  TALOSCTL_VERSION: v1.14.2
+  TALOSCTL_SHA256: c6c9552b0e5f767352c595fa1c0af4f186f697488646872955057d23990a66c4
 
 jobs:
   fmt:
@@ -85,6 +89,15 @@ jobs:
         with:
           tofu_version: ${{ matrix.tofu }}
           tofu_wrapper: false
+      - name: Install talosctl
+        if: matrix.module == 'talos'
+        run: |
+          curl -fsSLo talosctl "https://github.com/siderolabs/talos/releases/download/${TALOSCTL_VERSION}/talosctl-linux-amd64"
+          echo "${TALOSCTL_SHA256}  talosctl" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 talosctl "$RUNNER_TEMP/bin/talosctl"
+          rm talosctl
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - run: tofu init -backend=false -input=false
       - run: tofu test
 

@@ -59,7 +59,25 @@ mock_provider "proxmox" {
 }
 
 # Mocked as well: these tests are about addressing and placement, not about the rendered config
-mock_provider "talos" {}
+mock_provider "talos" {
+  # The kubeconfig certificates are read as base64
+  mock_resource "talos_cluster_kubeconfig" {
+    defaults = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+}
+
+# The Kubernetes version the cluster runs, as the API answers it. A run that needs another
+# answer overrides data.http.kubernetes_version
+mock_provider "http" {
+  mock_data "http" {
+    defaults = {
+      status_code   = 200
+      response_body = "{\"gitVersion\": \"v1.37.1\"}"
+    }
+  }
+}
 
 variables {
   cluster_name          = "test"
@@ -68,7 +86,7 @@ variables {
   node_keys             = ["a", "b"]
   cluster_ip            = "2001:db8::1"
   talos_version         = "v1.14.2"
-  kubernetes_version    = "v1.35.5"
+  kubernetes_version    = "v1.37.1"
   netbox_node_prefix    = "2001:db8:0:1::/64"
   netbox_node_prefix_id = 42
   node_vlan_vid         = 100

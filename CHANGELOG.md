@@ -2,6 +2,20 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.5.0 - 2026-10-16
+
+The module no longer changes the Kubernetes version of a running cluster, and `kubernetes_version` defaults to `v1.37.1`. A cluster that runs another version and uses the default fails its plan: upgrade it with `talosctl upgrade-k8s` first, or set `kubernetes_version` to the version it runs. Worker pools need the control-plane pool's `running_kubernetes_version` output to be checked, and the machine running OpenTofu needs tcp/6443 to the first control-plane node. Nothing else changes on an existing cluster.
+
+### Added
+
+- `talos`: the tests run `talosctl validate` on the rendered configs of a control plane with the defaults, a control plane with every option on, and workers. The Talos provider renders a config without validating it, so a patch that Talos rejects passed the tests before. `tofu test` in `talos` now needs `talosctl` on the `PATH`.
+- `talos`: `kubelet_max_pods`, the most pods the kubelet runs on a node (`config.maxPods` of the `KubeletConfig` document), on control planes and workers. `null` by default, which leaves the kubelet default of 110 and changes nothing on an existing cluster. Setting it changes the machine config of every node of the pool, which is re-applied. Rendering is tested, and the same patch on a config from `talosctl gen config` passes `talosctl validate` for a control plane and a worker; not applied to a running cluster.
+
+### Changed
+
+- `talos`: the module no longer changes the Kubernetes version of a running cluster. A control-plane pool reads the version the cluster runs from the API (`/version` on the first control-plane node, with the client certificate of the kubeconfig), and the config apply refuses to run when `kubernetes_version` differs. On a running cluster the plan fails; only when the kubeconfig itself has a change pending is the version read during the apply, which then fails before any node gets the config. Upgrade with `talosctl upgrade-k8s`, one minor version at a time, then set `kubernetes_version` to the version the cluster runs. Worker pools are checked against the new `running_kubernetes_version` input: pass the control-plane pool's output of the same name. A new cluster needs nothing: the version is read during the apply, after the bootstrap. The machine running OpenTofu needs access to the API on the first control-plane node on tcp/6443; when the API cannot be reached the plan fails after 5 to 10 minutes of retries, and `skip_kubernetes_version_check = true` applies without the check. New provider: `hashicorp/http` `~> 3.6`. Tested with the API mocked; not tried on a running cluster.
+- `talos`: `kubernetes_version` defaults to `v1.37.1`, the version Talos v1.14.2 ships, instead of `v1.35.5`. A running cluster that uses the default is refused until it runs that version: upgrade it first, or set `kubernetes_version` to the version it runs.
+
 ## v0.4.0 - 2026-10-12
 
 A plan on an existing cluster shows the machine config of every control plane changing, for the metrics ports: the snippet files are replaced and the config is re-applied. Workers show no change. After it, every control plane serves the metrics of etcd, kube-controller-manager and kube-scheduler on all its addresses: check the firewall first, or turn them off with `etcd_listen_metrics_urls = []` and `null` for the two bind addresses.

@@ -58,13 +58,24 @@ mock_provider "proxmox" {
   }
 }
 
+# The Kubernetes version the cluster runs, as the API answers it. A run that needs another
+# answer overrides data.http.kubernetes_version
+mock_provider "http" {
+  mock_data "http" {
+    defaults = {
+      status_code   = 200
+      response_body = "{\"gitVersion\": \"v1.37.1\"}"
+    }
+  }
+}
+
 variables {
   cluster_name          = "test"
   node_prefix           = "n-"
   node_keys             = ["a"]
   cluster_ip            = "2001:db8::1"
   talos_version         = "v1.14.2"
-  kubernetes_version    = "v1.35.5"
+  kubernetes_version    = "v1.37.1"
   netbox_node_prefix    = "2001:db8:0:1::/64"
   netbox_node_prefix_id = 42
   node_vlan_vid         = 100
@@ -82,6 +93,32 @@ run "setup" {
   }
 }
 
+# A new cluster has no API to read during the plan: the version is read during the apply,
+# after the bootstrap, and the config does not wait for it. First after setup, while the
+# state has no kubeconfig yet
+run "new_cluster_config_is_known_during_the_plan" {
+  command = plan
+
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  assert {
+    condition     = data.talos_machine_configuration.this.machine_configuration != ""
+    error_message = "The config of a new cluster must be known during the plan."
+  }
+}
+
 run "controlplane_without_oidc" {
   override_resource {
     target = talos_machine_bootstrap.this
@@ -93,6 +130,9 @@ run "controlplane_without_oidc" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -157,8 +197,31 @@ run "controlplane_without_oidc" {
   }
 
   assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeletConfig\n")][0].config == {} && !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.kubelet)
+    error_message = "Without kubelet_max_pods the kubelet must keep its own default."
+  }
+
+  assert {
+    condition     = output.running_kubernetes_version == "v1.37.1" && length(data.http.kubernetes_version) == 1
+    error_message = "A control-plane pool must read the version the cluster runs."
+  }
+
+  assert {
     condition     = output.kubeconfig != "" && output.talosconfig != ""
     error_message = "Control planes must output kubeconfig and talosconfig."
+  }
+}
+
+# The talos provider renders a patch that Talos rejects on the node without an error, so
+# the asserts cannot catch it. A validate run hands the config of the run before it to
+# `talosctl validate`: only the latest run of the module is there to read from
+run "validate_controlplane_defaults" {
+  module {
+    source = "./tests/validate"
+  }
+
+  variables {
+    machine_configuration = run.controlplane_without_oidc.machine_configuration
   }
 }
 
@@ -173,6 +236,9 @@ run "scheduling_on_control_planes" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -199,6 +265,9 @@ run "extra_cert_sans" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -225,6 +294,9 @@ run "discovery_off" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -251,6 +323,9 @@ run "null_oidc_attributes_give_the_defaults" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -295,6 +370,9 @@ run "controlplane_with_oidc" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -352,6 +430,9 @@ run "oidc_without_groups_claim" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -378,6 +459,9 @@ run "oidc_without_cluster_admin_binding" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -404,6 +488,9 @@ run "oidc_groups_prefix_names_the_group" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -430,6 +517,9 @@ run "oidc_without_groups_prefix" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -456,6 +546,9 @@ run "kubernetes_talos_api_access" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -513,6 +606,9 @@ run "etcd_metrics_listen_on_ipv6_by_default" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -543,6 +639,9 @@ run "etcd_listen_metrics_urls" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -569,6 +668,9 @@ run "etcd_listen_metrics_urls_off" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -608,6 +710,9 @@ run "bind_addresses_are_ipv6_by_default" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -638,6 +743,9 @@ run "bind_addresses" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -673,6 +781,89 @@ run "bind_address_must_be_a_wildcard" {
   expect_failures = [var.controller_manager_bind_address, var.scheduler_bind_address]
 }
 
+run "kubelet_max_pods" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    kubelet_max_pods           = 250
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeletConfig\n")][0].config == { maxPods = 250 } && !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.kubelet)
+    error_message = "kubelet_max_pods must set maxPods in the KubeletConfig document, not in the v1alpha1 document: Talos 1.14 rejects kubelet config in both."
+  }
+}
+
+run "kubelet_max_pods_on_workers" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    kubelet_max_pods           = 250
+  }
+
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: KubeletConfig\n")][0].config == { maxPods = 250 } && !can(yamldecode(split("\n---\n", data.talos_machine_configuration.this.machine_configuration)[0]).machine.kubelet)
+    error_message = "kubelet_max_pods must reach workers too."
+  }
+}
+
+run "validate_worker_with_kubelet_max_pods" {
+  module {
+    source = "./tests/validate"
+  }
+
+  variables {
+    machine_configuration = run.kubelet_max_pods_on_workers.machine_configuration
+  }
+}
+
+run "kubelet_max_pods_must_be_a_whole_number" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    kubelet_max_pods           = 0.5
+  }
+
+  expect_failures = [
+    var.kubelet_max_pods,
+  ]
+}
+
 run "worker" {
   override_resource {
     target = talos_machine_bootstrap.this
@@ -684,6 +875,9 @@ run "worker" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -732,6 +926,178 @@ run "worker" {
   }
 }
 
+run "validate_worker" {
+  module {
+    source = "./tests/validate"
+  }
+
+  variables {
+    machine_configuration = run.worker.machine_configuration
+  }
+}
+
+# A control plane on the version the cluster runs. Leaves a kubeconfig in the state for the
+# runs below, as on a running cluster
+run "kubernetes_version_matches_the_cluster" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  assert {
+    condition     = output.running_kubernetes_version == "v1.37.1"
+    error_message = "The version must be read from the API."
+  }
+}
+
+# The module never moves the Kubernetes version: a config built for another version than
+# the cluster runs is refused, on control planes and on workers. A bump of
+# kubernetes_version changes the config and so the snippet files: the plan must refuse it,
+# not an apply that has already uploaded them
+run "kubernetes_version_must_match_the_cluster" {
+  command = plan
+
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+    kubernetes_version         = "v1.38.0"
+  }
+
+  expect_failures = [
+    talos_machine_configuration_apply.this,
+  ]
+}
+
+run "kubernetes_version_must_match_the_cluster_on_workers" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    running_kubernetes_version = "v1.36.5"
+  }
+
+  expect_failures = [
+    talos_machine_configuration_apply.this,
+  ]
+}
+
+run "kubernetes_version_without_v_matches" {
+  command = plan
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "worker"
+    kubernetes_version         = "1.37.1"
+    running_kubernetes_version = "v1.37.1"
+  }
+}
+
+# kubernetes_version_matches_the_cluster leaves a kubeconfig in the state, so the version
+# is read during the plan
+run "kubernetes_version_read_must_succeed" {
+  command = plan
+
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  override_data {
+    target = data.http.kubernetes_version
+    values = {
+      status_code   = 403
+      response_body = "{}"
+    }
+  }
+
+  variables {
+    talos_machine_secrets      = run.setup.machine_secrets
+    talos_client_configuration = run.setup.client_configuration
+    type                       = "controlplane"
+  }
+
+  expect_failures = [
+    talos_machine_configuration_apply.this,
+  ]
+}
+
+run "skip_kubernetes_version_check" {
+  command = plan
+
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  variables {
+    talos_machine_secrets         = run.setup.machine_secrets
+    talos_client_configuration    = run.setup.client_configuration
+    type                          = "controlplane"
+    kubernetes_version            = "v1.36.5"
+    skip_kubernetes_version_check = true
+  }
+
+  assert {
+    condition     = length(data.http.kubernetes_version) == 0 && output.running_kubernetes_version == null
+    error_message = "With the check skipped the version must not be read."
+  }
+}
+
 run "oidc_needs_issuer_client_id_and_username_claim" {
   command = plan
 
@@ -745,6 +1111,9 @@ run "oidc_needs_issuer_client_id_and_username_claim" {
 
   override_resource {
     target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
   }
 
   variables {
@@ -782,5 +1151,49 @@ run "talos_version_without_a_patch_version" {
     talos_client_configuration = run.setup.client_configuration
     type                       = "worker"
     talos_version              = "v1.14"
+  }
+}
+
+# Every option the module has that changes the config of a control plane, for the
+# validation below
+run "controlplane_with_everything" {
+  override_resource {
+    target = talos_machine_bootstrap.this
+  }
+
+  override_resource {
+    target = talos_machine_configuration_apply.this
+  }
+
+  override_resource {
+    target = talos_cluster_kubeconfig.this
+    values = {
+      kubernetes_client_configuration = { host = "https://[2001:db8::1]:6443", ca_certificate = "dGVzdA==", client_certificate = "dGVzdA==", client_key = "dGVzdA==" }
+    }
+  }
+
+  variables {
+    talos_machine_secrets              = run.setup.machine_secrets
+    talos_client_configuration         = run.setup.client_configuration
+    type                               = "controlplane"
+    extra_cert_sans                    = ["api.test.example.org"]
+    discovery_enabled                  = false
+    allow_scheduling_on_control_planes = true
+    oidc                               = { issuer_url = "https://sso.example.org/realms/test", client_id = "kubernetes", audiences = ["dashboard"] }
+    kubernetes_talos_api_access        = { allowed_roles = ["os:etcd:backup"], allowed_kubernetes_namespaces = ["talos-backup"] }
+    etcd_listen_metrics_urls           = ["http://[::]:2381"]
+    controller_manager_bind_address    = "::"
+    scheduler_bind_address             = "::"
+    kubelet_max_pods                   = 250
+  }
+}
+
+run "validate_controlplane_with_everything" {
+  module {
+    source = "./tests/validate"
+  }
+
+  variables {
+    machine_configuration = run.controlplane_with_everything.machine_configuration
   }
 }

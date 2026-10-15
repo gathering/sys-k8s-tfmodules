@@ -330,9 +330,22 @@ variable "talos_version" {
 }
 
 variable "kubernetes_version" {
-  description = "Kubernetes version"
+  description = "Kubernetes version the machine config is built with. It must be the version the cluster runs: the module does not upgrade Kubernetes, and a config apply refuses to run when they differ. Upgrade with `talosctl upgrade-k8s`, then set this to the new version"
   type        = string
-  default     = "v1.35.5"
+  default     = "v1.37.1"
+  nullable    = false
+}
+
+variable "running_kubernetes_version" {
+  description = "For a worker pool: the Kubernetes version the cluster runs, the `running_kubernetes_version` output of the control-plane pool. The config apply refuses to run when it differs from `kubernetes_version`. Null skips the check. A control-plane pool reads the version itself"
+  type        = string
+  default     = null
+}
+
+variable "skip_kubernetes_version_check" {
+  description = "Do not read the Kubernetes version from the cluster, and apply the config without comparing it to `kubernetes_version`. For when the API cannot be reached; set it back to false afterwards"
+  type        = bool
+  default     = false
   nullable    = false
 }
 
@@ -367,6 +380,17 @@ variable "talos_inline_manifests" {
   }))
   default  = []
   nullable = false
+}
+
+variable "kubelet_max_pods" {
+  description = "Most pods the kubelet runs on a node (`config.maxPods` of the `KubeletConfig` document). `null` leaves it to the kubelet: 110"
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.kubelet_max_pods == null ? true : var.kubelet_max_pods >= 1 && floor(var.kubelet_max_pods) == var.kubelet_max_pods
+    error_message = "kubelet_max_pods must be a whole number, 1 or greater, or null."
+  }
 }
 
 variable "allow_scheduling_on_control_planes" {
