@@ -20,7 +20,7 @@ Provisions a group of Talos Kubernetes nodes (controlplane or worker) on Proxmox
 
 ```hcl
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.5.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.6.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"

@@ -18,5 +18,9 @@ terraform {
       source  = "fortinetdev/fortios"
       version = "~> 1.26"
     }
+    keycloak = {
+      source  = "keycloak/keycloak"
+      version = "~> 5.10"
+    }
   }
 }

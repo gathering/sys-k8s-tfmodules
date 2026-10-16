@@ -45,6 +45,7 @@ jobs:
           - fg-k8slb
           - fg-policy
           - fg-vlan
+          - keycloak-client
           # Uses relative module sources, so it validates the modules of this commit together.
           # So does fg-k8slb, which calls ../fg-policy
           - examples/full-cluster
@@ -77,6 +78,7 @@ jobs:
           - fg-k8slb
           - fg-policy
           - fg-vlan
+          - keycloak-client
         tofu:
           - ~1.8.0
           - latest
@@ -128,6 +130,6 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Check generated READMEs
         run: |
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client; do
             terraform-docs --output-check "$dir"
           done

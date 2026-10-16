@@ -106,3 +106,15 @@ variable "api_source_addresses" {
   type        = list(string)
   default     = ["bastions-v6"]
 }
+
+variable "keycloak_url" {
+  description = "URL of Keycloak, without a trailing slash"
+  type        = string
+  default     = "https://sso.example.org"
+}
+
+variable "keycloak_realm_name" {
+  description = "Keycloak realm of the cluster's OIDC client"
+  type        = string
+  default     = "example"
+}
