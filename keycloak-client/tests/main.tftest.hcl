@@ -7,6 +7,12 @@ mock_provider "keycloak" {
       client_secret = "mock-secret"
     }
   }
+
+  mock_data "keycloak_authentication_flow" {
+    defaults = {
+      id = "5c1f9e2a-7b3d-4e8f-a6c0-d2b4e6f8a1c3"
+    }
+  }
 }
 
 variables {
@@ -58,6 +64,11 @@ run "public_defaults" {
   assert {
     condition     = length(keycloak_openid_group_membership_protocol_mapper.this) == 0
     error_message = "No groups mapper by default: the realm's groups scope adds the claim."
+  }
+
+  assert {
+    condition     = length(keycloak_openid_client.this.authentication_flow_binding_overrides) == 0 && length(data.keycloak_authentication_flow.browser) == 0
+    error_message = "No flow override and no flow lookup by default."
   }
 
   assert {
@@ -177,6 +188,7 @@ run "null_gives_the_default" {
     web_origins                               = null
     pkce_code_challenge_method                = null
     oauth2_device_authorization_grant_enabled = null
+    browser_flow                              = null
   }
 
   assert {
@@ -184,6 +196,7 @@ run "null_gives_the_default" {
       keycloak_openid_client.this.pkce_code_challenge_method == "S256",
       !keycloak_openid_client.this.oauth2_device_authorization_grant_enabled,
       length(keycloak_openid_client.this.web_origins) == 0,
+      length(keycloak_openid_client.this.authentication_flow_binding_overrides) == 0,
     ])
     error_message = "A null input must give the module default."
   }
@@ -243,6 +256,25 @@ run "redirect_uris_required_for_browser_login" {
   ]
 }
 
+run "browser_flow" {
+  command = plan
+
+  variables {
+    browser_flow = "browser-members-only"
+  }
+
+  assert {
+    condition = alltrue([
+      data.keycloak_authentication_flow.browser[0].realm_id == "test",
+      data.keycloak_authentication_flow.browser[0].alias == "browser-members-only",
+      length(keycloak_openid_client.this.authentication_flow_binding_overrides) == 1,
+      one(keycloak_openid_client.this.authentication_flow_binding_overrides).browser_id == "5c1f9e2a-7b3d-4e8f-a6c0-d2b4e6f8a1c3",
+      one(keycloak_openid_client.this.authentication_flow_binding_overrides).direct_grant_id == null,
+    ])
+    error_message = "browser_flow must look the flow up in the realm and set its ID as the browser override, with no direct grant override."
+  }
+}
+
 run "invalid_inputs" {
   command = plan
 
@@ -253,6 +285,7 @@ run "invalid_inputs" {
     valid_redirect_uris        = ["http://localhost:8000", ""]
     pkce_code_challenge_method = "S512"
     groups_claim               = ""
+    browser_flow               = ""
   }
 
   expect_failures = [
@@ -262,5 +295,6 @@ run "invalid_inputs" {
     var.valid_redirect_uris,
     var.pkce_code_challenge_method,
     var.groups_claim,
+    var.browser_flow,
   ]
 }

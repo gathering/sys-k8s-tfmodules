@@ -25,7 +25,7 @@ In the admin console of the realm:
 
 1. *Clients* > *Create client*. Client type *OpenID Connect*, client ID `opentofu`. Next.
 2. *Client authentication* on. Under *Authentication flow*, tick *Service account roles* only: turn off *Standard flow* and *Direct access grants*. Next, then Save.
-3. Tab *Service accounts roles* > *Assign role* > *Client roles*. Pick `manage-clients` of `realm-management`, and nothing else. It lets the client create, change and delete the clients of the realm and their mappers, and nothing outside clients.
+3. Tab *Service accounts roles* > *Assign role* > *Client roles*. Pick `manage-clients` of `realm-management`. It lets the client create, change and delete the clients of the realm and their mappers, and nothing outside clients. A module call with `browser_flow` also needs `view-realm` of `realm-management`: the flow is looked up by its alias, and reading the flows of a realm is a realm read. Nothing else.
 4. Tab *Credentials*: copy the client secret.
 
 Or with `kcadm.sh`, logged in as an admin:
@@ -34,7 +34,7 @@ Or with `kcadm.sh`, logged in as an admin:
 kcadm.sh create clients -r my-realm -s clientId=opentofu -s publicClient=false \
   -s serviceAccountsEnabled=true -s standardFlowEnabled=false -s directAccessGrantsEnabled=false
 kcadm.sh add-roles -r my-realm --uusername service-account-opentofu \
-  --cclientid realm-management --rolename manage-clients
+  --cclientid realm-management --rolename manage-clients --rolename view-realm   # view-realm for browser_flow only
 kcadm.sh get clients -r my-realm -q clientId=opentofu --fields id   # then:
 kcadm.sh get clients/<id>/client-secret -r my-realm
 ```
@@ -128,9 +128,34 @@ Keycloak generates the secret of a `CONFIDENTIAL` client. The `client_secret` ou
 
 PKCE is on by default, and Keycloak then refuses a login without it. Turn it on in the application before the client is created or imported, such as `use_pkce = true` in the `generic_oauth` section of Grafana, or set `pkce_code_challenge_method = ""`.
 
+A client in the realm `master` has no `realm-management` client to take roles from. There, the roles that manage the clients of `master` are on the client `master-realm`, and those of another realm on the client `<realm>-realm` of `master`: `manage-clients` and `view-realm` of `wannabe-realm` for the realm `wannabe`. Prefer a client in the realm it manages.
+
+## Browser flow
+
+`browser_flow` replaces the realm's browser flow for this client with another authentication flow of the realm, given by its alias: for example a copy of the browser flow that only lets the members of a group in.
+
+```hcl
+module "umami_client" {
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//keycloak-client?ref=v0.6.0"
+
+  realm_name          = "wannabe"
+  name                = "sys-k8s-lab-umami"
+  access_type         = "CONFIDENTIAL"
+  valid_redirect_uris = ["https://umami.example.org/*"]
+  browser_flow        = "browser-members-only"
+}
+```
+
+The flow must exist before the plan: the module looks it up by alias and fails the plan when there is none. The provider client needs `view-realm` for that lookup, next to `manage-clients`. Only the browser flow is overridden. The direct grant flow is not, as direct access grants are off.
+
+Null, the default, means no override, and removes one the client has: the provider has no way to leave it alone.
+
 ## Importing a client
 
-An existing client is imported by the realm and Keycloak's ID of the client (the UUID in the console URL, not the client ID). The secret is kept:
+An existing client is imported by the realm and Keycloak's ID of the client (the UUID in the console URL, not the client ID). The secret is kept.
+
+> **Check the client's *Advanced* tab, under *Authentication flow overrides*, before importing it.** If it has a browser flow override, set `browser_flow` to that flow's alias first. Without it, the first apply removes the override, and the client logs users in with the realm's browser flow: an override that limits who may log in is gone, and every user of the realm gets in. The plan shows it as `- authentication_flow_binding_overrides`.
+
 
 ```hcl
 import {
@@ -139,7 +164,7 @@ import {
 }
 ```
 
-The first plan shows the client changed in place: settings that differ from the module call, the description `Managed by OpenTofu` when none is given, and `use_refresh_tokens` going from `false` to `true` on a client whose JSON never had it set, which is what Keycloak did already. Every plan that updates the client also shows `client_secret_wo` as a write-only attribute; the module does not set it, and the secret does not change. A plan that replaces the client would make a new secret: stop and check the import ID.
+The first plan shows the client changed in place: settings that differ from the module call, the description `Managed by OpenTofu` when none is given, and `use_refresh_tokens` going from `false` to `true` on a client whose JSON never had it set, which is what Keycloak did already. A client that never had it set can also show `backchannel_logout_session_required` going from `false` to `true`, the console default for new clients. It only matters to a client with a backchannel logout URL, which the module does not set. Every plan that updates the client also shows `client_secret_wo` as a write-only attribute; the module does not set it, and the secret does not change. A plan that replaces the client would make a new secret: stop and check the import ID.
 
 Settings without an input keep the value they had, so an imported client can differ from one the module created: an imported client keeps front-channel logout on and its login theme, while the provider creates new clients with front-channel logout off.
 
@@ -171,6 +196,7 @@ No modules.
 | ---- | ---- |
 | [keycloak_openid_client.this](https://registry.terraform.io/providers/keycloak/keycloak/latest/docs/resources/openid_client) | resource |
 | [keycloak_openid_group_membership_protocol_mapper.this](https://registry.terraform.io/providers/keycloak/keycloak/latest/docs/resources/openid_group_membership_protocol_mapper) | resource |
+| [keycloak_authentication_flow.browser](https://registry.terraform.io/providers/keycloak/keycloak/latest/docs/data-sources/authentication_flow) | data source |
 
 ## Inputs
 
@@ -179,6 +205,7 @@ No modules.
 | <a name="input_access_type"></a> [access\_type](#input\_access\_type) | `PUBLIC` for a client that cannot keep a secret, such as kubectl with kubelogin. `CONFIDENTIAL` for a web app that logs in with the `client_secret` output | `string` | n/a | yes |
 | <a name="input_admin_url"></a> [admin\_url](#input\_admin\_url) | URL Keycloak sends admin requests to the application on, such as a logout of all sessions. Few applications take them. Null clears it | `string` | `null` | no |
 | <a name="input_base_url"></a> [base\_url](#input\_base\_url) | URL Keycloak links to the application with, from the account console. Relative to `root_url` when it starts with `/`. Null clears it | `string` | `null` | no |
+| <a name="input_browser_flow"></a> [browser\_flow](#input\_browser\_flow) | Alias of an authentication flow of the realm that replaces the realm's browser flow for this client, for example one that only lets the members of a group in. Null, the default, leaves the realm's browser flow and removes an override the client has: a client imported with an override must set this, or the first apply removes it | `string` | `null` | no |
 | <a name="input_description"></a> [description](#input\_description) | Client description: say what the client is for. Defaults to `Managed by OpenTofu` | `string` | `null` | no |
 | <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Name of the client shown to users, on the login page and in the account console. Null shows the client ID | `string` | `null` | no |
 | <a name="input_groups_claim"></a> [groups\_claim](#input\_groups\_claim) | Adds a mapper to the client that puts the user's groups in this claim, by name without the path, in the ID token, the access token, userinfo and token introspection. Null, the default, adds none: the realm at The Gathering has a default client scope `groups` that adds the claim to every client. Keycloak does not create that scope: a realm without it needs `"groups"` here | `string` | `null` | no |

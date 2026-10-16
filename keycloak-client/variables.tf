@@ -105,6 +105,17 @@ variable "oauth2_device_authorization_grant_enabled" {
   nullable    = false
 }
 
+variable "browser_flow" {
+  description = "Alias of an authentication flow of the realm that replaces the realm's browser flow for this client, for example one that only lets the members of a group in. Null, the default, leaves the realm's browser flow and removes an override the client has: a client imported with an override must set this, or the first apply removes it"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.browser_flow != ""
+    error_message = "browser_flow must not be empty. Set it to null to use the realm's browser flow."
+  }
+}
+
 variable "groups_claim" {
   description = "Adds a mapper to the client that puts the user's groups in this claim, by name without the path, in the ID token, the access token, userinfo and token introspection. Null, the default, adds none: the realm at The Gathering has a default client scope `groups` that adds the claim to every client. Keycloak does not create that scope: a realm without it needs `\"groups\"` here"
   type        = string

@@ -1,3 +1,10 @@
+data "keycloak_authentication_flow" "browser" {
+  count = var.browser_flow != null ? 1 : 0
+
+  realm_id = var.realm_name
+  alias    = var.browser_flow
+}
+
 resource "keycloak_openid_client" "this" {
   realm_id    = var.realm_name
   client_id   = var.name
@@ -25,6 +32,15 @@ resource "keycloak_openid_client" "this" {
   root_url  = var.root_url != null ? var.root_url : ""
   base_url  = var.base_url != null ? var.base_url : ""
   admin_url = var.admin_url != null ? var.admin_url : ""
+
+  # The block is not computed: without it, the provider removes an override the client has.
+  # direct_grant_id stays unset, as direct access grants are off
+  dynamic "authentication_flow_binding_overrides" {
+    for_each = data.keycloak_authentication_flow.browser
+    content {
+      browser_id = authentication_flow_binding_overrides.value.id
+    }
+  }
 
   lifecycle {
     precondition {
