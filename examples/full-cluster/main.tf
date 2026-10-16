@@ -1,9 +1,9 @@
-# One cluster built from all five modules. The nodes are tracked by key (node_keys): any node
+# One cluster built from all six modules. The nodes are tracked by key (node_keys): any node
 # can be removed without touching the others.
 #
 # The module sources are relative so that CI validates this example against the modules of
 # the same commit. In your own root module, pin a release instead:
-#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.5.0"
+#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.6.0"
 
 # Endpoints and credentials come from the providers' environment variables
 provider "netbox" {}
@@ -12,7 +12,20 @@ provider "proxmox" {}
 
 provider "fortios" {}
 
+provider "keycloak" {}
+
 resource "talos_machine_secrets" "this" {}
+
+# The client kubectl logs in to the cluster with, through kubelogin
+module "kubernetes_client" {
+  source = "../../keycloak-client"
+
+  realm_name          = var.keycloak_realm_name
+  name                = "${var.cluster_name}-cli"
+  display_name        = "${var.cluster_name} - Kubernetes API"
+  access_type         = "PUBLIC"
+  valid_redirect_uris = ["http://localhost:8000", "http://localhost:18000"]
+}
 
 module "vlan" {
   source = "../../fg-vlan"
@@ -45,6 +58,12 @@ module "controlplane" {
   netbox_node_prefix_id = module.vlan.prefix_id
   node_vlan_vid         = module.vlan.vlan_vid
   netbox_site_id        = var.netbox_site_id
+
+  # Members of the Keycloak group <cluster_name>-cluster-admin are cluster admin
+  oidc = {
+    issuer_url = "${var.keycloak_url}/realms/${var.keycloak_realm_name}"
+    client_id  = module.kubernetes_client.client_id
+  }
 }
 
 # No depends_on on the control plane: a module-level depends_on defers every data source in

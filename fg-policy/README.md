@@ -16,7 +16,7 @@ The following objects must already exist on the FortiGate:
 
 ```hcl
 module "policy" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-policy?ref=v0.5.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-policy?ref=v0.6.0"
 
   name     = "k8s-egress"
   srcintf  = ["vlan100"]

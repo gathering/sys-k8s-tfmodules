@@ -2,6 +2,15 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.6.0 - 2026-10-16
+
+A new module, `keycloak-client`. The other modules are unchanged: a plan shows no changes for unchanged inputs.
+
+### Added
+
+- `keycloak-client`: one OpenID Connect client in an existing Keycloak realm, `PUBLIC` or `CONFIDENTIAL`, with the authorization code flow only and PKCE S256 by default. Its `client_id` output is `oidc.client_id` of `talos`, `client_secret` gives the secret of a confidential client and `keycloak_id` is Keycloak's ID of the client. An optional groups mapper (`groups_claim`) is for a realm without a default client scope `groups` like the one at The Gathering; Keycloak does not create that scope. An existing client can be imported and keeps its secret: the first plan changes it in place to the module's settings, and also shows `use_refresh_tokens` going from `false` to `true` on a client that never had it set (no change in behaviour) and `client_secret_wo` as a write-only attribute (not set by the module). New provider: `keycloak/keycloak` `~> 5.10`. Tested with the provider mocked, and against Keycloak 26.4 in a container: creating clients, importing existing ones without a new secret, a clean plan after the apply, and the `aud` and `groups` claims of the ID token.
+- `examples/full-cluster`: a client for the Kubernetes API, wired into `oidc` of the control plane.
+
 ## v0.5.0 - 2026-10-16
 
 The module no longer changes the Kubernetes version of a running cluster, and `kubernetes_version` defaults to `v1.37.1`. A cluster that runs another version and uses the default fails its plan: upgrade it with `talosctl upgrade-k8s` first, or set `kubernetes_version` to the version it runs. Worker pools need the control-plane pool's `running_kubernetes_version` output to be checked, and the machine running OpenTofu needs tcp/6443 to the first control-plane node. Nothing else changes on an existing cluster.
