@@ -47,6 +47,7 @@ jobs:
           - fg-vlan
           - keycloak-client
           - dns-records
+          - ceph-storage
           # Uses relative module sources, so it validates the modules of this commit together.
           # So does fg-k8slb, which calls ../fg-policy
           - examples/full-cluster
@@ -63,6 +64,10 @@ jobs:
         with:
           tofu_version: ${{ matrix.tofu }}
           tofu_wrapper: false
+      # The ceph provider loads the Ceph client libraries
+      - name: Install librados
+        if: matrix.module == 'ceph-storage'
+        run: sudo apt-get update && sudo apt-get install -y librados2 librbd1
       - run: tofu init -backend=false -input=false
       - run: tofu validate
 
@@ -81,6 +86,7 @@ jobs:
           - fg-vlan
           - keycloak-client
           - dns-records
+          - ceph-storage
         tofu:
           - ~1.8.0
           - latest
@@ -102,6 +108,10 @@ jobs:
           install -m 0755 talosctl "$RUNNER_TEMP/bin/talosctl"
           rm talosctl
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # The ceph provider loads the Ceph client libraries
+      - name: Install librados
+        if: matrix.module == 'ceph-storage'
+        run: sudo apt-get update && sudo apt-get install -y librados2 librbd1
       - run: tofu init -backend=false -input=false
       - run: tofu test
 
@@ -132,6 +142,6 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Check generated READMEs
         run: |
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records ceph-storage; do
             terraform-docs --output-check "$dir"
           done

@@ -2,7 +2,7 @@
 
 OpenTofu modules used to deploy and manage Talos Kubernetes clusters at [The Gathering](https://gathering.org).
 
-The modules cover the full infrastructure stack: VM provisioning on Proxmox, IP/VLAN allocation in Netbox, network configuration on FortiGate — all IPv6-only — OpenID Connect clients in Keycloak and forward DNS records in Poweradmin.
+The modules cover the full infrastructure stack: VM provisioning on Proxmox, IP/VLAN allocation in Netbox, network configuration on FortiGate — all IPv6-only — OpenID Connect clients in Keycloak, forward DNS records in Poweradmin and the Ceph storage of each cluster.
 
 ## Modules
 
@@ -15,6 +15,7 @@ The modules cover the full infrastructure stack: VM provisioning on Proxmox, IP/
 | [fg-vlan](./fg-vlan/) | Provisions a VLAN end-to-end: allocates VLAN ID and IPv6 prefix in Netbox and creates the interface and address object on FortiGate |
 | [keycloak-client](./keycloak-client/) | One OpenID Connect client in a Keycloak realm, public or confidential, with a groups claim |
 | [dns-records](./dns-records/) | Forward DNS record sets in a Poweradmin zone. Reverse records come from Netbox |
+| [ceph-storage](./ceph-storage/) | The Ceph storage of one cluster for ceph-csi: an RBD pool, a CephFS filesystem and a cephx client for each |
 
 ## How the modules fit together
 
@@ -131,7 +132,7 @@ Node addresses do not exist before the first apply, so nothing can be tracked by
 - Site-specific values are variables whose defaults are the values used at The Gathering.
 - A module that calls another module of this repository uses a relative source (`../fg-policy`). OpenTofu fetches the whole repository for a `git::...//<module>?ref=` source, so the path resolves there as well, at the same ref.
 - Tests live in `<module>/tests` and run with `tofu test` against mocked providers. `examples/` uses relative module sources so that CI validates it against the modules of the same commit.
-- Run `pre-commit run --all-files` before pushing. It runs the same checks as CI: `tofu fmt`, `tofu validate`, `tofu test`, `tflint` and the terraform-docs check.
+- Run `pre-commit run --all-files` before pushing. It runs the same checks as CI: `tofu fmt`, `tofu validate`, `tofu test`, `tflint` and the terraform-docs check. `tofu validate` and `tofu test` leave out `ceph-storage`, whose provider only loads on Linux with librados installed; CI runs them.
 
 ## Versioning
 
@@ -152,6 +153,7 @@ Releases are git tags (`vMAJOR.MINOR.PATCH`) and are listed in [CHANGELOG.md](./
 | Proxmox VE | Hypervisor for Kubernetes VMs |
 | Netbox | IPAM and DCIM for IP/VLAN allocation |
 | Poweradmin 4.1+ | Forward DNS records |
+| Ceph | RBD and CephFS volumes of the clusters |
 | FortiGate | Firewall, BGP, and load balancing |
 | Keycloak | Identity provider for OIDC |
 
@@ -163,6 +165,7 @@ Releases are git tags (`vMAJOR.MINOR.PATCH`) and are listed in [CHANGELOG.md](./
 | Keycloak | `keycloak/keycloak` |
 | Netbox | `e-breuninger/netbox` |
 | Poweradmin | `poweradmin/poweradmin` |
+| Ceph | `gathering/ceph` (linux_amd64 only, needs librados) |
 | Proxmox | `bpg/proxmox` |
 | Talos | `siderolabs/talos` |
 
@@ -177,7 +180,7 @@ terraform-docs markdown table --output-file README.md --output-mode inject <modu
 To regenerate all modules at once:
 
 ```sh
-for dir in talos fg-k8slb fg-vlan fg-bgp-neighbors fg-policy keycloak-client dns-records; do
+for dir in talos fg-k8slb fg-vlan fg-bgp-neighbors fg-policy keycloak-client dns-records ceph-storage; do
   terraform-docs markdown table --output-file README.md --output-mode inject "$dir"
 done
 ```

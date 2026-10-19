@@ -1,5 +1,6 @@
-# One cluster built from all seven modules. The nodes are tracked by key (node_keys): any node
-# can be removed without touching the others.
+# One cluster built from every module but ceph-storage, whose provider only loads on Linux with
+# librados installed. The nodes are tracked by key (node_keys): any node can be removed without
+# touching the others.
 #
 # The module sources are relative so that CI validates this example against the modules of
 # the same commit. In your own root module, pin a release instead:

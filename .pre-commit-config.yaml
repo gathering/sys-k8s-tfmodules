@@ -1,4 +1,6 @@
 # Mirrors .github/workflows/ci.yml. Needs tofu, tflint and terraform-docs on PATH.
+# tofu validate and tofu test leave out ceph-storage: its provider is built for linux_amd64 only
+# and needs librados, so it cannot be loaded on a Mac. CI validates and tests it.
 repos:
   - repo: local
     hooks:
@@ -57,7 +59,7 @@ repos:
         name: terraform-docs
         entry: >-
           bash -c 'set -eu;
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records ceph-storage; do
           terraform-docs --output-check "$dir";
           done'
         language: system
