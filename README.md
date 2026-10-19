@@ -2,7 +2,7 @@
 
 OpenTofu modules used to deploy and manage Talos Kubernetes clusters at [The Gathering](https://gathering.org).
 
-The modules cover the full infrastructure stack: VM provisioning on Proxmox, IP/VLAN allocation in Netbox, network configuration on FortiGate — all IPv6-only — and OpenID Connect clients in Keycloak.
+The modules cover the full infrastructure stack: VM provisioning on Proxmox, IP/VLAN allocation in Netbox, network configuration on FortiGate — all IPv6-only — OpenID Connect clients in Keycloak, forward DNS records in Poweradmin and the Ceph storage of each cluster.
 
 ## Modules
 
@@ -14,6 +14,8 @@ The modules cover the full infrastructure stack: VM provisioning on Proxmox, IP/
 | [fg-policy](./fg-policy/) | Generic FortiGate IPv6 firewall policy with optional NAT64 support |
 | [fg-vlan](./fg-vlan/) | Provisions a VLAN end-to-end: allocates VLAN ID and IPv6 prefix in Netbox and creates the interface and address object on FortiGate |
 | [keycloak-client](./keycloak-client/) | One OpenID Connect client in a Keycloak realm, public or confidential, with a groups claim |
+| [dns-records](./dns-records/) | Forward DNS record sets in a Poweradmin zone. Reverse records come from Netbox |
+| [ceph-storage](./ceph-storage/) | The Ceph storage of one cluster for ceph-csi: an RBD pool, a CephFS filesystem and a cephx client for each |
 
 ## How the modules fit together
 
@@ -24,6 +26,7 @@ fg-vlan  --prefix, prefix_id, vlan_vid-->  talos (controlplane)  --nodes_by_key-
 fg-vlan  --interface_name, firewall_address_name-->  fg-k8slb / fg-policy interfaces and addresses
 fg-k8slb  --calls-->  fg-policy (its API policy)
 keycloak-client  --client_id-->  talos (controlplane) oidc.client_id
+talos.nodes_by_key, fg-vlan.gateway_ip / gateway_dns_name, cluster_ip  -->  dns-records.records_by_key
 ```
 
 This wiring is inferred from the variable and output shapes, not copied from a live root module. [`examples/full-cluster`](./examples/full-cluster) is a complete root module that validates in CI. A sketch with most inputs left out:
@@ -36,13 +39,13 @@ locals {
 }
 
 module "vlan" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-vlan?ref=v0.6.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-vlan?ref=v0.7.0"
   name   = "my-cluster"
   # ...
 }
 
 module "controlplane" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.6.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.7.0"
 
   cluster_name               = "my-cluster"
   node_prefix                = "my-cluster-cp-"
@@ -58,7 +61,7 @@ module "controlplane" {
 }
 
 module "workers" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.6.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.7.0"
 
   node_prefix = "my-cluster-w-"
   type        = "worker"
@@ -69,7 +72,7 @@ module "workers" {
 }
 
 module "k8s_lb" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-k8slb?ref=v0.6.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-k8slb?ref=v0.7.0"
 
   cluster_name = "my-cluster"
   extip        = local.cluster_ip
@@ -81,13 +84,29 @@ module "k8s_lb" {
 }
 
 module "bgp_neighbors" {
-  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-bgp-neighbors?ref=v0.6.0"
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//fg-bgp-neighbors?ref=v0.7.0"
 
   cluster_name = "my-cluster"
   neighbors_by_key = {
     for node in concat(values(module.controlplane.nodes_by_key), values(module.workers.nodes_by_key)) : node.name => node
   }
   # ...
+}
+
+module "dns" {
+  source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//dns-records?ref=v0.7.0"
+
+  zone_name = "gathering.systems"
+  records_by_key = merge(
+    {
+      api     = { name = "api.my-cluster.gathering.systems", values = [local.cluster_ip] }
+      gateway = { name = module.vlan.gateway_dns_name, values = [module.vlan.gateway_ip] }
+    },
+    {
+      for node in concat(values(module.controlplane.nodes_by_key), values(module.workers.nodes_by_key)) :
+      node.name => { name = "${node.name}.gathering.systems", values = [node.ip] }
+    },
+  )
 }
 ```
 
@@ -113,7 +132,7 @@ Node addresses do not exist before the first apply, so nothing can be tracked by
 - Site-specific values are variables whose defaults are the values used at The Gathering.
 - A module that calls another module of this repository uses a relative source (`../fg-policy`). OpenTofu fetches the whole repository for a `git::...//<module>?ref=` source, so the path resolves there as well, at the same ref.
 - Tests live in `<module>/tests` and run with `tofu test` against mocked providers. `examples/` uses relative module sources so that CI validates it against the modules of the same commit.
-- Run `pre-commit run --all-files` before pushing. It runs the same checks as CI: `tofu fmt`, `tofu validate`, `tofu test`, `tflint` and the terraform-docs check.
+- Run `pre-commit run --all-files` before pushing. It runs the same checks as CI: `tofu fmt`, `tofu validate`, `tofu test`, `tflint` and the terraform-docs check. `tofu validate` and `tofu test` leave out `ceph-storage`, whose provider only loads on Linux with librados installed; CI runs them.
 
 ## Versioning
 
@@ -133,6 +152,8 @@ Releases are git tags (`vMAJOR.MINOR.PATCH`) and are listed in [CHANGELOG.md](./
 | [terraform-docs](https://terraform-docs.io) | Documentation generation |
 | Proxmox VE | Hypervisor for Kubernetes VMs |
 | Netbox | IPAM and DCIM for IP/VLAN allocation |
+| Poweradmin 4.1+ | Forward DNS records |
+| Ceph | RBD and CephFS volumes of the clusters |
 | FortiGate | Firewall, BGP, and load balancing |
 | Keycloak | Identity provider for OIDC |
 
@@ -143,6 +164,8 @@ Releases are git tags (`vMAJOR.MINOR.PATCH`) and are listed in [CHANGELOG.md](./
 | FortiOS | `fortinetdev/fortios` |
 | Keycloak | `keycloak/keycloak` |
 | Netbox | `e-breuninger/netbox` |
+| Poweradmin | `poweradmin/poweradmin` |
+| Ceph | `gathering/ceph` (linux_amd64 only, needs librados) |
 | Proxmox | `bpg/proxmox` |
 | Talos | `siderolabs/talos` |
 
@@ -157,7 +180,7 @@ terraform-docs markdown table --output-file README.md --output-mode inject <modu
 To regenerate all modules at once:
 
 ```sh
-for dir in talos fg-k8slb fg-vlan fg-bgp-neighbors fg-policy keycloak-client; do
+for dir in talos fg-k8slb fg-vlan fg-bgp-neighbors fg-policy keycloak-client dns-records ceph-storage; do
   terraform-docs markdown table --output-file README.md --output-mode inject "$dir"
 done
 ```

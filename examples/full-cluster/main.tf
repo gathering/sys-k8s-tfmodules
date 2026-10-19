@@ -1,9 +1,10 @@
-# One cluster built from all six modules. The nodes are tracked by key (node_keys): any node
-# can be removed without touching the others.
+# One cluster built from every module but ceph-storage, whose provider only loads on Linux with
+# librados installed. The nodes are tracked by key (node_keys): any node can be removed without
+# touching the others.
 #
 # The module sources are relative so that CI validates this example against the modules of
 # the same commit. In your own root module, pin a release instead:
-#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.6.0"
+#   source = "git::https://github.com/gathering/sys-k8s-tfmodules.git//talos?ref=v0.7.0"
 
 # Endpoints and credentials come from the providers' environment variables
 provider "netbox" {}
@@ -13,6 +14,16 @@ provider "proxmox" {}
 provider "fortios" {}
 
 provider "keycloak" {}
+
+# The poweradmin provider reads no environment variables
+provider "poweradmin" {
+  api_url = var.poweradmin_url
+  api_key = var.poweradmin_api_key
+}
+
+locals {
+  api_dns_name = "api.${var.cluster_name}.${var.domain_name}"
+}
 
 resource "talos_machine_secrets" "this" {}
 
@@ -34,6 +45,7 @@ module "vlan" {
   netbox_vlan_group_name = var.netbox_vlan_group_name
   netbox_role_id         = var.netbox_role_id
   netbox_base_prefix     = var.netbox_base_prefix
+  domain_name            = var.domain_name
 }
 
 module "controlplane" {
@@ -44,6 +56,8 @@ module "controlplane" {
   type                       = "controlplane"
   node_keys                  = keys(var.controlplane_nodes)
   cluster_ip                 = var.cluster_ip
+  extra_cert_sans            = [local.api_dns_name]
+  domain_name                = var.domain_name
   talos_version              = var.talos_version
   kubernetes_version         = var.kubernetes_version
   talos_machine_secrets      = talos_machine_secrets.this.machine_secrets
@@ -78,6 +92,7 @@ module "workers" {
   cores                      = 4
   memory                     = 8192
   cluster_ip                 = var.cluster_ip
+  domain_name                = var.domain_name
   talos_version              = var.talos_version
   kubernetes_version         = var.kubernetes_version
   running_kubernetes_version = module.controlplane.running_kubernetes_version
@@ -128,4 +143,26 @@ module "egress" {
   dstintf  = [var.wan_interface]
   dstaddr6 = ["all"]
   services = ["ALL"]
+}
+
+# Forward records only: the reverse records come from automation in Netbox, from the DNS
+# names the talos and fg-vlan modules set on the addresses
+module "dns" {
+  source = "../../dns-records"
+
+  zone_name = var.domain_name
+
+  records_by_key = merge(
+    {
+      api     = { name = local.api_dns_name, values = [var.cluster_ip] }
+      gateway = { name = module.vlan.gateway_dns_name, values = [module.vlan.gateway_ip] }
+      # Any other record, here a CNAME for the API
+      kubernetes = { name = "kubernetes.${var.cluster_name}.${var.domain_name}", type = "CNAME", values = ["${local.api_dns_name}."] }
+    },
+    # By node name, like the BGP neighbors
+    {
+      for node in concat(values(module.controlplane.nodes_by_key), values(module.workers.nodes_by_key)) :
+      node.name => { name = "${node.name}.${var.domain_name}", values = [node.ip] }
+    },
+  )
 }

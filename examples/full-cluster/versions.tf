@@ -22,5 +22,9 @@ terraform {
       source  = "keycloak/keycloak"
       version = "~> 5.10"
     }
+    poweradmin = {
+      source  = "poweradmin/poweradmin"
+      version = "~> 0.6.3"
+    }
   }
 }

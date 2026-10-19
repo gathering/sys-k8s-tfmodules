@@ -10,6 +10,12 @@ variable "cluster_ip" {
   default     = "2001:db8:ffff::10"
 }
 
+variable "domain_name" {
+  description = "DNS domain of the nodes, the gateway and the API name. Also the Poweradmin zone their records go in"
+  type        = string
+  default     = "gathering.systems"
+}
+
 variable "controlplane_nodes" {
   description = "Control planes: node key => realserver id on the load balancer. The node is named `<cluster_name>-cp-<key>`. Never give an id to another key while its node exists"
   type        = map(number)
@@ -117,4 +123,16 @@ variable "keycloak_realm_name" {
   description = "Keycloak realm of the cluster's OIDC client"
   type        = string
   default     = "example"
+}
+
+variable "poweradmin_url" {
+  description = "URL of Poweradmin"
+  type        = string
+  default     = "https://dns.example.org"
+}
+
+variable "poweradmin_api_key" {
+  description = "Poweradmin API key"
+  type        = string
+  sensitive   = true
 }
