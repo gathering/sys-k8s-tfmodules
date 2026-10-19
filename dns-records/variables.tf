@@ -38,12 +38,13 @@ variable "records_by_key" {
   }
 
   validation {
-    condition     = alltrue([for r in values(var.records_by_key) : r.ttl == null || r.ttl >= 1])
+    # Conditionals, not || and &&: OpenTofu 1.8 evaluates both sides
+    condition     = alltrue([for r in values(var.records_by_key) : r.ttl == null ? true : r.ttl >= 1])
     error_message = "A TTL must be at least 1 second."
   }
 
   validation {
-    condition     = alltrue([for r in values(var.records_by_key) : r.values != null && length(r.values) > 0 && alltrue([for v in r.values : v != null && v != ""])])
+    condition     = alltrue([for r in values(var.records_by_key) : r.values == null ? false : length(r.values) > 0 && alltrue([for v in r.values : v == null ? false : v != ""])])
     error_message = "Every record needs at least one value, and no value may be empty."
   }
 
