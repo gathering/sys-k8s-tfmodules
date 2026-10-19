@@ -27,3 +27,13 @@ output "firewall_address_name" {
   description = "Name of the FortiGate IPv6 address object for the prefix"
   value       = fortios_firewall_address6.this.name
 }
+
+output "gateway_ip" {
+  description = "IPv6 address of the gateway on the VLAN, host 1 of the prefix, without a prefix length"
+  value       = cidrhost(netbox_available_prefix.this.prefix, 1)
+}
+
+output "gateway_dns_name" {
+  description = "DNS name of the gateway address in Netbox (`gw.<name>.<domain_name>`). Null when `domain_name` is null"
+  value       = local.gateway_dns_name
+}

@@ -71,6 +71,8 @@ run "vlan" {
       output.prefix == "2001:db8:0:7b::/64",
       output.prefix_id == "60",
       output.firewall_address_name == "vlan123 address",
+      output.gateway_ip == "2001:db8:0:7b::1",
+      output.gateway_dns_name == "gw.test.gathering.systems",
     ])
     error_message = "An output no longer carries the value its name says."
   }
@@ -110,7 +112,7 @@ run "without_a_dns_name" {
   }
 
   assert {
-    condition     = netbox_ip_address.gw.dns_name == null
+    condition     = netbox_ip_address.gw.dns_name == null && output.gateway_dns_name == null
     error_message = "A null domain_name must leave the gateway without a DNS name, whatever the VLAN name."
   }
 }

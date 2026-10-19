@@ -2,6 +2,16 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.7.0 - 2026-10-19
+
+A new module, `dns-records`, and two new outputs of `fg-vlan`. The other modules are unchanged: a plan shows no changes for unchanged inputs.
+
+### Added
+
+- `dns-records`: forward DNS record sets in one existing Poweradmin zone, one `poweradmin_rrset` per key of `records_by_key`. Names are fully qualified and written relative to `zone_name`; a name outside the zone, and two keys with the same name and type, are refused at plan time. The type is `AAAA` by default, and an `AAAA` value must be an IPv6 address, written in canonical form. The TTL is 300 seconds unless `ttl` or the record sets another. No reverse records: those come from automation in Netbox. Poweradmin replaces a whole record set on every write, so an existing record set with a name and type of the module is taken over on the first apply, without an import. New provider: `poweradmin/poweradmin` `~> 0.6.3`, which needs Poweradmin 4.1.0 or later and reads no environment variables. The module's tests run with the provider mocked; not applied to a running Poweradmin.
+- `fg-vlan`: outputs `gateway_ip`, the gateway address without a prefix length, and `gateway_dns_name`, its DNS name in Netbox (null without `domain_name`), for the gateway's record in `dns-records`.
+- `examples/full-cluster`: records for the API name, every node, the gateway and a CNAME, in a zone `domain_name` that is also the domain of the nodes and the gateway. The API name is in `extra_cert_sans` of the control plane.
+
 ## v0.6.0 - 2026-10-16
 
 A new module, `keycloak-client`. The other modules are unchanged: a plan shows no changes for unchanged inputs.

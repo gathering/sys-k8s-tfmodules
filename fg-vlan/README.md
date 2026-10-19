@@ -79,6 +79,8 @@ No modules.
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_firewall_address_name"></a> [firewall\_address\_name](#output\_firewall\_address\_name) | Name of the FortiGate IPv6 address object for the prefix |
+| <a name="output_gateway_dns_name"></a> [gateway\_dns\_name](#output\_gateway\_dns\_name) | DNS name of the gateway address in Netbox (`gw.<name>.<domain_name>`). Null when `domain_name` is null |
+| <a name="output_gateway_ip"></a> [gateway\_ip](#output\_gateway\_ip) | IPv6 address of the gateway on the VLAN, host 1 of the prefix, without a prefix length |
 | <a name="output_interface_name"></a> [interface\_name](#output\_interface\_name) | FortiGate interface name of the VLAN (`vlan<VLAN ID>`) |
 | <a name="output_netbox_vlan_name"></a> [netbox\_vlan\_name](#output\_netbox\_vlan\_name) | Name of the VLAN in Netbox, as given in `name`. Also the alias of the FortiGate interface |
 | <a name="output_prefix"></a> [prefix](#output\_prefix) | Prefix of the VLAN in CIDR notation |

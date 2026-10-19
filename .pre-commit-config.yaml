@@ -18,10 +18,10 @@ repos:
           tmp="$(mktemp -d)";
           trap "rm -rf \"$tmp\"" EXIT;
           mkdir "$tmp/examples";
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client examples/full-cluster; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records examples/full-cluster; do
           cp -R "$dir" "$tmp/$dir";
           done;
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client examples/full-cluster; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records examples/full-cluster; do
           (cd "$tmp/$dir" && tofu init -backend=false -input=false >/dev/null && tofu validate);
           done'
         language: system
@@ -35,14 +35,14 @@ repos:
           bash -c 'set -eu;
           tmp="$(mktemp -d)";
           trap "rm -rf \"$tmp\"" EXIT;
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records; do
           cp -R "$dir" "$tmp/$dir";
           done;
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records; do
           (cd "$tmp/$dir" && tofu init -backend=false -input=false >/dev/null && tofu test);
           done'
         language: system
-        files: ^(talos|fg-[a-z0-9-]+|keycloak-client)/.*\.(tf|tftest\.hcl)$
+        files: ^(talos|fg-[a-z0-9-]+|keycloak-client|dns-records)/.*\.(tf|tftest\.hcl)$
         pass_filenames: false
 
       - id: tflint
@@ -57,7 +57,7 @@ repos:
         name: terraform-docs
         entry: >-
           bash -c 'set -eu;
-          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client; do
+          for dir in talos fg-bgp-neighbors fg-k8slb fg-policy fg-vlan keycloak-client dns-records; do
           terraform-docs --output-check "$dir";
           done'
         language: system

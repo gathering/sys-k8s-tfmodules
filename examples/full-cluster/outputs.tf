@@ -14,3 +14,8 @@ output "nodes" {
   description = "All nodes as objects with `name` and `ip`"
   value       = concat(values(module.controlplane.nodes_by_key), values(module.workers.nodes_by_key))
 }
+
+output "dns_records" {
+  description = "Forward DNS records of the cluster, by key"
+  value       = module.dns.records_by_key
+}
