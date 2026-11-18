@@ -1,5 +1,23 @@
 # Upgrading
 
+## To v0.8.0
+
+v0.8.0 turns kube-proxy off on a cluster that runs it since v0.3.0. Talos stops applying its manifest, but never deletes what it applied. Do one cluster at a time.
+
+1. Apply v0.8.0. A cluster with `apply_mode = "staged"` only gets it at the next reboot of each control plane; take `staged` out first if its nodes have rebooted since the move to v0.3.0. On each control plane, `talosctl -n <node> get manifests | grep -i proxy` then prints nothing.
+2. Save what Talos made for kube-proxy, then delete it: the DaemonSet and ServiceAccount `kube-system/kube-proxy`, and the ClusterRoleBinding `kube-proxy`. There is no ConfigMap.
+
+   ```bash
+   kubectl -n kube-system get ds/kube-proxy sa/kube-proxy clusterrolebinding/kube-proxy -o yaml > kube-proxy.yaml   # the rollback
+   kubectl -n kube-system delete ds/kube-proxy sa/kube-proxy clusterrolebinding/kube-proxy
+   ```
+
+3. Check that the CNI serves every Service: with Cilium, `cilium-dbg status --verbose` shows the same KubeProxyReplacement details as before, and ClusterIP, NodePort and LoadBalancer Services and DNS answer.
+
+kube-proxy's nftables rules stay on each node until its next reboot. A CNI that replaces kube-proxy, such as Cilium, translates Services before they are reached.
+
+**Applying v0.7.0 again does not bring kube-proxy back**: Talos creates each bootstrap object only once, and keeps a list of them in the ConfigMap `kube-system/talos-bootstrap-manifests-inventory`. To roll back, apply the saved objects without what the server set: `grep -v -E '^ +(resourceVersion|uid|creationTimestamp):' kube-proxy.yaml | kubectl apply -f -`.
+
 ## To v0.1.0, from `main` before it
 
 There is no in-place upgrade. v0.1.0 tracks nodes, BGP neighbors and realservers by a caller-chosen key instead of by position, names the machine config snippet per pool and has no `moved` blocks for resources of the modules before it. A plan of v0.1.0 against the state of an older deployment destroys and recreates its nodes.

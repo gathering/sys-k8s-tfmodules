@@ -2,6 +2,14 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.8.0 - 2026-11-18
+
+`talos` turns kube-proxy off again. Since v0.3.0 the module deleted the `KubeProxyConfig` document, and without it Talos 1.14 falls back to v1alpha1's `cluster.proxy`, which the module does not set, and runs kube-proxy: every cluster built on or moved to v0.3.0 or later runs kube-proxy next to the CNI. The other modules are unchanged.
+
+### Fixed
+
+- `talos`: control planes get a `KubeProxyConfig` document with `enabled: false` instead of none. The test checks for that document, where it checked that there was none. A plan on an existing cluster shows the machine config of every control plane changing; it applies without a reboot, except with `apply_mode = "staged"`. **Turning kube-proxy off does not remove it from a running cluster**: see [UPGRADING.md](./UPGRADING.md#to-v080). Rendering is tested and passes `talosctl validate`; not applied to a running cluster.
+
 ## v0.7.0 - 2026-10-19
 
 Two new modules, `dns-records` and `ceph-storage`, and two new outputs of `fg-vlan`. The other modules are unchanged: a plan shows no changes for unchanged inputs.
@@ -61,7 +69,7 @@ A plan on an existing cluster shows the machine config of every node changing, w
 
 - `talos`: `talos_version` defaults to `v1.14.2` and `kubernetes_version` to `v1.35.5`. Both were required.
 - `talos`: OIDC is set up with the `KubeAuthenticationConfig` document. Talos owns the file, so turning OIDC on or changing `oidc` applies without a reboot. The file under `/var/lib/apiserver` of v0.2.0, its mount and the `authentication-config` argument are gone; v0.2.0 broke kube-apiserver when OIDC was applied to a running cluster, because Talos only writes such a file at boot.
-- `talos`: the module's settings are patched in as one document each instead of one `machine`/`cluster` patch: `ResolverConfig`, `TimeSyncConfig`, `KubeNetworkConfig`, `DiscoveryServiceConfig`, `KubeAPIServerConfig`, `KubeNodeConfig`, `KubeAuthenticationConfig` and `KubeInlineManifestConfig`. kube-proxy and Flannel are left out by removing their documents. The `config_patches` output is a list of those patches.
+- `talos`: the module's settings are patched in as one document each instead of one `machine`/`cluster` patch: `ResolverConfig`, `TimeSyncConfig`, `KubeNetworkConfig`, `DiscoveryServiceConfig`, `KubeAPIServerConfig`, `KubeNodeConfig`, `KubeAuthenticationConfig` and `KubeInlineManifestConfig`. kube-proxy and Flannel are left out by removing their documents. That left kube-proxy on: fixed in v0.8.0. The `config_patches` output is a list of those patches.
 - `talos`: with `allow_scheduling_on_control_planes`, a control plane also loses the `node.kubernetes.io/exclude-from-external-load-balancers` label, next to the `NoSchedule` taint. Before, the label stayed.
 - `talos`: the KubePrism port is no longer set by the module. It is the Talos default, 7445, as before.
 - `talos`: everything the module does not set is what Talos generates for the 1.14 contract. Compared to a v1.13 contract:

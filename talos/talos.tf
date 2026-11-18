@@ -117,11 +117,15 @@ EOT
   ]
 
   # What only control planes get. No kube-proxy and no Flannel: the cluster brings its own CNI
+  # with kube-proxy replacement. kube-proxy is turned off, not removed: without a
+  # KubeProxyConfig document Talos falls back to v1alpha1's cluster.proxy, unset here, which
+  # runs kube-proxy. Without a KubeFlannelCNIConfig document it falls back to cluster.network,
+  # unset too, which runs no Flannel. One with no CNI name would bring Flannel back
   controlplane_config_patches = concat(
     local.node_config_patches,
     [
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeAPIServerConfig", certExtraSANs = local.cert_sans }),
-      yamlencode({ apiVersion = "v1alpha1", kind = "KubeProxyConfig", "$patch" = "delete" }),
+      yamlencode({ apiVersion = "v1alpha1", kind = "KubeProxyConfig", enabled = false }),
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeFlannelCNIConfig", "$patch" = "delete" }),
     ],
     local.scheduling_config_patches,

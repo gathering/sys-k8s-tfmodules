@@ -152,8 +152,14 @@ run "controlplane_without_oidc" {
   }
 
   assert {
-    condition     = [for kind in ["KubeProxyConfig", "KubeFlannelCNIConfig", "KubePrismConfig", "KubeAPIServerConfig", "KubeNodeConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 0, 1, 1, 1]
-    error_message = "No kube-proxy, no Flannel and KubePrism on are part of the design."
+    condition     = [for kind in ["KubeFlannelCNIConfig", "KubePrismConfig", "KubeAPIServerConfig", "KubeNodeConfig"] : length([for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : d if startswith(d, "apiVersion: v1alpha1\nkind: ${kind}\n")])] == [0, 1, 1, 1]
+    error_message = "No Flannel and KubePrism on are part of the design."
+  }
+
+  # A missing KubeProxyConfig is Talos's default, which runs kube-proxy: it must be there, off
+  assert {
+    condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d).enabled if startswith(d, "apiVersion: v1alpha1\nkind: KubeProxyConfig\n")] == [false]
+    error_message = "No kube-proxy is part of the design: control planes need a KubeProxyConfig with enabled: false."
   }
 
   assert {
