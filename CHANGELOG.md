@@ -2,6 +2,14 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
+## v0.9.1 - 2026-11-18
+
+Comments and docs only: a plan shows no changes from v0.9.0.
+
+### Fixed
+
+- `talos`: the comment, README and changelog of v0.9.0 said Talos never trims without the module's `FilesystemTrimConfig`. The config Talos 1.14 generates already has the same document, so the rendered config does not change.
+
 ## v0.9.0 - 2026-11-18
 
 Changes to the hardware of the `talos` VMs, and a weekly trim. The balloon device and the display need a restart of each VM, and the provider restarts every VM it changes: a plain apply restarts every node of a pool at once. Make the changes in Proxmox one node at a time first, or apply one VM at a time: see [UPGRADING.md](./UPGRADING.md#to-v090). Not applied to a running cluster.
