@@ -55,8 +55,12 @@ resource "proxmox_virtual_environment_vm" "this" {
     type  = var.cpu_type
   }
 
+  # floating = dedicated turns the balloon device on without ballooning any memory away.
+  # Without it (floating = 0) Proxmox cannot read the guest's memory statistics and shows
+  # every page the guest has touched, page cache included, as used: close to 100%
   memory {
     dedicated = var.memory
+    floating  = var.memory
   }
 
   agent {
@@ -69,6 +73,10 @@ resource "proxmox_virtual_environment_vm" "this" {
     interface    = "scsi0"
     size         = var.disk
     iothread     = true
+    # Space freed in the guest is freed in Ceph too. Set here because a disk block on a clone
+    # takes the provider's defaults (discard = "ignore", ssd = false), not the template's
+    discard = "on"
+    ssd     = true
   }
 
   initialization {
@@ -90,6 +98,15 @@ resource "proxmox_virtual_environment_vm" "this" {
       }
     }
   }
+
+  # The Talos dashboard is drawn on the screen, so the VM needs a display. Not left to the
+  # template: one with vga = serial0 gives the VM none, and the dashboard is never seen
+  vga {
+    type = "std"
+  }
+
+  # Talos writes its own output to ttyS0 (the last console= of the image): xterm.js in Proxmox
+  serial_device {}
 
   network_device {
     bridge  = var.vm_bridge
