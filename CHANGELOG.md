@@ -2,15 +2,15 @@
 
 All notable changes to these modules are listed here. Versions are git tags; pin module sources with `?ref=<tag>`.
 
-## Unreleased
+## v0.9.0 - 2026-11-18
 
-Changes to the hardware of the `talos` VMs. Each needs a restart of each VM, and the provider restarts every VM it changes: a plain apply restarts every node of a pool at once. Make the changes in Proxmox one node at a time first, or apply one VM at a time: see [UPGRADING.md](./UPGRADING.md#to-the-next-version-vm-hardware). Not applied to a running cluster.
+Changes to the hardware of the `talos` VMs, and a weekly trim. The balloon device and the display need a restart of each VM, and the provider restarts every VM it changes: a plain apply restarts every node of a pool at once. Make the changes in Proxmox one node at a time first, or apply one VM at a time: see [UPGRADING.md](./UPGRADING.md#to-v090). Not applied to a running cluster.
 
 ### Fixed
 
-- `talos`: the VMs get a balloon device, with `floating` equal to `dedicated` so no memory is ballooned away. Without one, Proxmox cannot read the guest's memory statistics and shows the memory the guest has touched, page cache included, as used: close to 100% on every Talos node.
-- `talos`: the VMs get a standard display (`vga` type `std`) and a serial port. The display came from the template, and one with `vga: serial0` gives the VMs no screen: the Talos dashboard, which is drawn on the screen, is never seen. The serial port keeps what Talos writes to `ttyS0` in the xterm.js console.
-- `talos`: the disk has `discard = "on"` and `ssd = true`. A disk block on a clone takes the provider's defaults, `discard = "ignore"`, so space freed in the guest was never freed in Ceph.
+- `talos`: the VMs get a balloon device, with `floating` equal to `dedicated` so no memory is ballooned away. Without one, Proxmox cannot read the guest's memory statistics and shows the memory the guest has touched as used. With one, Proxmox shows total minus `MemFree`: **page cache still counts as used**, so a busy node still shows high usage there. `kubectl top` and the node exporter show what is really in use.
+- `talos`: the VMs get a standard display (`vga` type `std`). The display came from the template, and one with `vga: serial0` gives the VMs no screen: the Talos dashboard, which is drawn on the screen, is never seen. The serial port is still the template's: the module does not set one, because the provider reads serial devices of a clone only once its state has some, and adding the block to existing VMs reboots them on every apply.
+- `talos`: space freed on the disks is freed in Ceph. The disk has `discard = "on"` and `ssd = true`: a disk block on a clone takes the provider's defaults, `discard = "ignore"`. Every node gets a `FilesystemTrimConfig` document with `interval: 168h`: without one Talos never trims. The document applies without a reboot, and the disk options without a restart of the VM.
 
 ## v0.8.0 - 2026-11-18
 

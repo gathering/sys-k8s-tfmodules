@@ -56,8 +56,8 @@ resource "proxmox_virtual_environment_vm" "this" {
   }
 
   # floating = dedicated turns the balloon device on without ballooning any memory away.
-  # Without it (floating = 0) Proxmox cannot read the guest's memory statistics and shows
-  # every page the guest has touched, page cache included, as used: close to 100%
+  # Proxmox then reads the guest's memory statistics. It counts total minus MemFree as used,
+  # so page cache still counts: kubectl top and the node exporter show what is really in use
   memory {
     dedicated = var.memory
     floating  = var.memory
@@ -73,8 +73,8 @@ resource "proxmox_virtual_environment_vm" "this" {
     interface    = "scsi0"
     size         = var.disk
     iothread     = true
-    # Space freed in the guest is freed in Ceph too. Set here because a disk block on a clone
-    # takes the provider's defaults (discard = "ignore", ssd = false), not the template's
+    # Passes the guest's discards to Ceph, sent by the trim of FilesystemTrimConfig. Set here
+    # because a disk block on a clone takes the provider's defaults (discard = "ignore", ssd = false)
     discard = "on"
     ssd     = true
   }
@@ -105,8 +105,9 @@ resource "proxmox_virtual_environment_vm" "this" {
     type = "std"
   }
 
-  # Talos writes its own output to ttyS0 (the last console= of the image): xterm.js in Proxmox
-  serial_device {}
+  # No serial_device: the serial port comes from the template. The provider reads serial
+  # devices of a clone only once the state has some, so adding the block to existing VMs
+  # shows a change on every apply and reboots them
 
   network_device {
     bridge  = var.vm_bridge

@@ -53,6 +53,8 @@ EOT
       yamlencode({ machine = { certSANs = local.cert_sans } }),
       yamlencode({ apiVersion = "v1alpha1", kind = "ResolverConfig", nameservers = [for address in var.nameservers : { address = address }] }),
       yamlencode({ apiVersion = "v1alpha1", kind = "TimeSyncConfig", ntp = { servers = var.time_servers } }),
+      # Without it Talos never trims, and space freed on the disks is not freed in Ceph
+      yamlencode({ apiVersion = "v1alpha1", kind = "FilesystemTrimConfig", interval = "168h" }),
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeNetworkConfig", podSubnets = var.pod_subnets, serviceSubnets = var.service_subnets }),
       var.discovery_enabled
       ? yamlencode({ apiVersion = "v1alpha1", kind = "DiscoveryServiceConfig", name = "default", endpoint = var.discovery_service_endpoint })

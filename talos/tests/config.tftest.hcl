@@ -178,6 +178,11 @@ run "controlplane_without_oidc" {
   }
 
   assert {
+    condition     = contains(["168h", "168h0m0s"], [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: FilesystemTrimConfig\n")][0].interval)
+    error_message = "Every node must be trimmed weekly, so space freed on the disks is freed in Ceph."
+  }
+
+  assert {
     condition     = [for d in split("\n---\n", data.talos_machine_configuration.this.machine_configuration) : yamldecode(d) if startswith(d, "apiVersion: v1alpha1\nkind: ResolverConfig\n")][0].hostDNS == { enabled = true, forwardKubeDNSToHost = true }
     error_message = "The nameservers must be added to the resolver Talos generates, not replace it."
   }

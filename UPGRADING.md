@@ -1,8 +1,8 @@
 # Upgrading
 
-## To the next version: VM hardware
+## To v0.9.0
 
-Every Talos VM gets a balloon device (`floating` equal to `dedicated`), a standard display, a serial port, and `discard` and SSD emulation on its disk. All of them need a restart of the VM, and the provider restarts each VM it changes: a plain apply restarts every node of a pool at once, which takes etcd below quorum on the control planes.
+Every Talos VM gets a balloon device (`floating` equal to `dedicated`), a standard display, and `discard` and SSD emulation on its disk. The balloon device and the display need a restart of the VM, and the provider restarts each VM it changes: a plain apply restarts every node of a pool at once, which takes etcd below quorum on the control planes. The weekly trim (`FilesystemTrimConfig`) applies without a reboot.
 
 To choose when each node restarts, make the change in Proxmox first, one node at a time, and apply afterwards. The apply then has nothing to change on the VMs.
 
@@ -11,7 +11,7 @@ To choose when each node restarts, make the change in Proxmox first, one node at
 
    ```sh
    qm config <vmid> | grep ^scsi0   # the disk's options now
-   qm set <vmid> --memory <memory> --balloon <memory> --vga std --serial0 socket
+   qm set <vmid> --memory <memory> --balloon <memory> --vga std
    qm set <vmid> --scsi0 <the scsi0 line, with discard=on,ssd=1>
    qm reboot <vmid>     # applies pending changes
    qm pending <vmid>    # nothing pending afterwards

@@ -147,7 +147,7 @@ run "defaults" {
       proxmox_virtual_environment_vm.this["a"].on_boot == false,
       proxmox_virtual_environment_vm.this["a"].memory[0].floating == proxmox_virtual_environment_vm.this["a"].memory[0].dedicated,
       proxmox_virtual_environment_vm.this["a"].vga[0].type == "std",
-      length(proxmox_virtual_environment_vm.this["a"].serial_device) == 1,
+      length(proxmox_virtual_environment_vm.this["a"].serial_device) == 0,
       proxmox_virtual_environment_vm.this["a"].disk[0].discard == "on",
       proxmox_virtual_environment_vm.this["a"].disk[0].ssd == true,
       proxmox_virtual_environment_vm.this["a"].agent[0].enabled == true,
