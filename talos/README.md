@@ -206,7 +206,8 @@ The config is the one Talos generates for `talos_version`, with one patch per co
 | `KubeletConfig` | all | `config.maxPods`, with `kubelet_max_pods` |
 | `DiscoveryServiceConfig` | all | `discovery_service_endpoint`, or removed with `discovery_enabled = false` |
 | `KubeAPIServerConfig` | control planes | `certExtraSANs`: `localhost`, `cluster_ip` and `extra_cert_sans` |
-| `KubeProxyConfig`, `KubeFlannelCNIConfig` | control planes | removed: the cluster brings its own CNI |
+| `KubeProxyConfig` | control planes | `enabled: false`: the cluster brings its own CNI with kube-proxy replacement. Without the document Talos runs kube-proxy |
+| `KubeFlannelCNIConfig` | control planes | removed: the cluster brings its own CNI |
 | `KubeNodeConfig` | control planes | with `allow_scheduling_on_control_planes`: no `NoSchedule` taint and no `exclude-from-external-load-balancers` label |
 | `KubeControllerManagerConfig` | control planes | `extraArgs.bind-address`: `controller_manager_bind_address` |
 | `KubeSchedulerConfig` | control planes | `extraArgs.bind-address`: `scheduler_bind_address` |
