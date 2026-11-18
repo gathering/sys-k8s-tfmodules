@@ -53,7 +53,8 @@ EOT
       yamlencode({ machine = { certSANs = local.cert_sans } }),
       yamlencode({ apiVersion = "v1alpha1", kind = "ResolverConfig", nameservers = [for address in var.nameservers : { address = address }] }),
       yamlencode({ apiVersion = "v1alpha1", kind = "TimeSyncConfig", ntp = { servers = var.time_servers } }),
-      # Without it Talos never trims, and space freed on the disks is not freed in Ceph
+      # The config Talos 1.14 generates already has this document with the same interval:
+      # set here so the weekly trim does not depend on the generated defaults
       yamlencode({ apiVersion = "v1alpha1", kind = "FilesystemTrimConfig", interval = "168h" }),
       yamlencode({ apiVersion = "v1alpha1", kind = "KubeNetworkConfig", podSubnets = var.pod_subnets, serviceSubnets = var.service_subnets }),
       var.discovery_enabled

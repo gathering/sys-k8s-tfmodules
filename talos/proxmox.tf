@@ -73,7 +73,7 @@ resource "proxmox_virtual_environment_vm" "this" {
     interface    = "scsi0"
     size         = var.disk
     iothread     = true
-    # Passes the guest's discards to Ceph, sent by the trim of FilesystemTrimConfig. Set here
+    # Passes the weekly trim of FilesystemTrimConfig through to Ceph. Set here
     # because a disk block on a clone takes the provider's defaults (discard = "ignore", ssd = false)
     discard = "on"
     ssd     = true

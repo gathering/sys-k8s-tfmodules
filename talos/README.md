@@ -202,7 +202,7 @@ The config is the one Talos generates for `talos_version`, with one patch per co
 | `cluster` (v1alpha1) | control planes | `etcd.extraArgs.listen-metrics-urls`: `etcd_listen_metrics_urls` |
 | `ResolverConfig` | all | `nameservers` |
 | `TimeSyncConfig` | all | `time_servers` |
-| `FilesystemTrimConfig` | all | `interval: 168h`: a weekly trim, so space freed on the disks is freed in Ceph |
+| `FilesystemTrimConfig` | all | `interval: 168h`, as Talos 1.14 generates it: a weekly trim, so space freed on the disks is freed in Ceph |
 | `KubeNetworkConfig` | all | `pod_subnets` and `service_subnets` |
 | `KubeletConfig` | all | `config.maxPods`, with `kubelet_max_pods` |
 | `DiscoveryServiceConfig` | all | `discovery_service_endpoint`, or removed with `discovery_enabled = false` |
