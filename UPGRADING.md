@@ -1,5 +1,29 @@
 # Upgrading
 
+## To the next version: VM hardware
+
+Every Talos VM gets a balloon device (`floating` equal to `dedicated`), a standard display, a serial port, and `discard` and SSD emulation on its disk. All of them need a restart of the VM, and the provider restarts each VM it changes: a plain apply restarts every node of a pool at once, which takes etcd below quorum on the control planes.
+
+To choose when each node restarts, make the change in Proxmox first, one node at a time, and apply afterwards. The apply then has nothing to change on the VMs.
+
+1. Check that etcd is healthy and has all members: `talosctl -n <node> etcd status`. Drain a worker first: `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`.
+2. On a Proxmox host, set the same values the module sets, then restart the VM through Proxmox. A reboot from inside the guest (`talosctl reboot`) keeps the QEMU process and does not apply the change.
+
+   ```sh
+   qm config <vmid> | grep ^scsi0   # the disk's options now
+   qm set <vmid> --memory <memory> --balloon <memory> --vga std --serial0 socket
+   qm set <vmid> --scsi0 <the scsi0 line, with discard=on,ssd=1>
+   qm reboot <vmid>     # applies pending changes
+   qm pending <vmid>    # nothing pending afterwards
+   ```
+
+   `--scsi0` replaces every option of the disk: copy the line from `qm config` and change only `discard` and `ssd`.
+
+3. Wait for the node to be `Ready` and etcd to list it again, `kubectl uncordon` a worker, then do the next node.
+4. Plan: the VMs show no change. Apply.
+
+Or apply with `-target` on one VM at a time: `-target='module.<pool>.proxmox_virtual_environment_vm.this["<key>"]'`.
+
 ## To v0.8.0
 
 v0.8.0 turns kube-proxy off on a cluster that runs it since v0.3.0. Talos stops applying its manifest, but never deletes what it applied. Do one cluster at a time.
